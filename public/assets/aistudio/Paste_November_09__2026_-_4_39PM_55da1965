@@ -1,0 +1,1209 @@
+# MASTER PROMPT: BasharTube তৈরি করুন
+## সম্পূর্ণ Professional Video Sharing ও Social Networking Website
+
+### ১. প্রজেক্ট পরিচিতি ও মূল উদ্দেশ্য
+
+আপনি একজন অভিজ্ঞ Software Architect, Full-Stack Developer, UI/UX Designer, Database Engineer, Cybersecurity Engineer এবং AI Integration Specialist হিসেবে কাজ করবেন।
+
+আপনার কাজ হলো **BasharTube** নামে একটি সম্পূর্ণ Professional, Modern, Responsive ও Scalable Video Sharing এবং Social Networking Website তৈরি করা।
+
+BasharTube হবে বাংলাদেশের মানুষের জন্য একটি আধুনিক Social Video Platform। এখানে ব্যবহারকারীরা ভিডিও Upload, Watch, Share, Like, Comment, Follow এবং একে অপরের সঙ্গে যোগাযোগ করতে পারবেন।
+
+এই Platform-এর মধ্যে একটি সম্পূর্ণ Advanced Messenger System-ও থাকবে।
+
+এটি শুধু একটি Static Website, UI Design, Mockup অথবা Demo Interface হবে না। এটি একটি বাস্তব Full-Stack Application হতে হবে, যেখানে Frontend, Backend, Database, Authentication, Media Storage, Real-Time Communication এবং Administrative Controls কার্যকরভাবে কাজ করবে।
+
+**প্রজেক্টের নাম:** BasharTube
+
+**প্রজেক্টের ধরন:** Video Sharing, Social Networking, Entertainment ও Messaging Platform।
+
+**প্রধান ব্যবহারকারী:** বাংলাদেশের সব মানুষ এবং অন্যান্য দেশের ব্যবহারকারীরাও।
+
+**Website-এর ভাষা:** বাংলা ও ইংরেজি।
+
+**সাপোর্টেড ডিভাইস:** Desktop, Laptop, Tablet, Android ও iOS Browser।
+
+---
+
+### ২. প্রযুক্তি ও Website Architecture
+
+একটি আধুনিক, নিরাপদ, দ্রুত এবং ভবিষ্যতে বড় করা যাবে এমন Technology Stack ব্যবহার করুন।
+
+প্রস্তাবিত প্রযুক্তি:
+
+- Frontend: Next.js, React ও TypeScript।
+- Design: Tailwind CSS।
+- Backend: NestJS অথবা সমমানের Backend Framework।
+- Database: PostgreSQL।
+- Cache: Redis।
+- Real-Time Communication: WebSocket।
+- Media Storage: S3-Compatible Object Storage।
+- Video Processing: FFmpeg।
+- Search: PostgreSQL Full-Text Search অথবা উপযুক্ত Search Engine।
+- Authentication: Secure Email ও Password Authentication।
+- Voice ও Video Calling: WebRTC।
+- Deployment: Cloud-Based Deployment Architecture।
+
+Frontend, Backend, Database, Media Processing এবং Storage আলাদা ও সুসংগঠিতভাবে তৈরি করতে হবে।
+
+প্রতিটি Module-এর জন্য Reusable Components, APIs, Database Migrations, Input Validation, Error Handling, Logging এবং Automated Tests তৈরি করতে হবে।
+
+কোনো গুরুত্বপূর্ণ Setting বা Limit সরাসরি Code-এর মধ্যে স্থায়ীভাবে Hardcode করা যাবে না। Administrator-এর মাধ্যমে পরিবর্তন করার ব্যবস্থা রাখতে হবে।
+
+### ৩. ব্র্যান্ডিং ও ডিজাইন
+
+BasharTube-এর জন্য একটি Premium, Modern ও Professional Design তৈরি করুন।
+
+**ডিজাইন থিম:**
+
+- প্রধান রং: Black।
+- Primary Accent: Cyan।
+- Secondary Accent: Pink।
+- Text: White ও Gray।
+- Background: Deep Black ও Dark Charcoal।
+
+ডিজাইনের বৈশিষ্ট্য:
+
+- Professional Dark Theme।
+- Modern UI ও UX।
+- Smooth Animation।
+- সুন্দর Card Design।
+- Rounded Components।
+- Consistent Icon System।
+- Professional Typography।
+- সুন্দর Spacing ও Alignment।
+- Loading Animation।
+- Skeleton Loading।
+- Error ও Success Message।
+- Responsive Navigation।
+- সহজে ব্যবহারযোগ্য Controls।
+
+সম্পূর্ণ Website-এ বাংলা ও ইংরেজি Language Switcher থাকবে।
+
+Navigation, Button, Form, Notification, Settings এবং Dashboard—সবকিছু দুই ভাষায় ব্যবহার করা যাবে।
+
+### ৪. User Registration ও Login System
+
+একটি সম্পূর্ণ User Account Management System তৈরি করুন।
+
+Registration-এর সময় নিচের তথ্য নিতে হবে:
+
+১. Full Name।
+২. Username।
+৩. Email Address।
+৪. Password।
+৫. Birthdate।
+
+Login System:
+
+- Email ও Password দিয়ে Login।
+- Password কমপক্ষে ৮ Character হতে হবে।
+- Secure Password Hashing।
+- Security Question-ভিত্তিক Password Recovery, সঙ্গে নিরাপদ Recovery Verification।
+- Password Change।
+- Email Change।
+- Username যেকোনো সময় পরিবর্তন।
+- Secure Logout।
+- Device ও Session Management।
+
+একজন User একসঙ্গে যত খুশি Device-এ Login থাকতে পারবেন। তবে Security Restrictions কার্যকর থাকবে।
+
+User নিজের Active Session ও Device দেখতে এবং Manage করতে পারবেন।
+
+Birthdate সম্পূর্ণ Private থাকবে।
+
+সবার Account Public হবে। Private Account System থাকবে না।
+
+User নিজের:
+
+- Profile Picture পরিবর্তন করতে পারবেন।
+- Bio পরিবর্তন করতে পারবেন।
+- Cover Photo ও Banner Upload করতে পারবেন।
+- একটি Website Link যুক্ত করতে পারবেন।
+- Account স্থায়ীভাবে Delete করতে পারবেন।
+
+Account Delete করলে সংশ্লিষ্ট User Data-ও নির্ধারিত Deletion Policy অনুযায়ী Delete করতে হবে।
+
+### ৫. User Profile ও Creator System
+
+একটি Advanced User Profile তৈরি করুন।
+
+প্রতিটি Profile-এ থাকবে:
+
+- Profile Picture।
+- Username।
+- Name।
+- Bio।
+- Cover Photo ও Banner।
+- Website Link।
+- Followers Count।
+- Following Count।
+- Total Video Views।
+- Total Likes।
+- Total Shares।
+- Published Videos।
+- Creator Analytics।
+
+Profile-এর Public Statistics এবং Followers ও Following List সবাই দেখতে পারবেন।
+
+Profile Visitor History রাখা যাবে না।
+
+অতিরিক্ত সুবিধা:
+
+- Follow ও Unfollow।
+- Block ও Unblock।
+- Don't Recommend This Creator।
+
+Don't Recommend This Creator চালু করলে User যতক্ষণ নিজে Undo বা Unblock না করবেন, ততক্ষণ এই Preference কার্যকর থাকবে।
+
+#### Verification System
+
+যেকোনো যোগ্য User Verification-এর জন্য আবেদন করতে পারবেন।
+
+আবেদনের সময় দিতে হবে:
+
+- Profile Information।
+- Verification Reason।
+- Supporting Proof Document।
+
+শুধু একজন Super Admin Verification আবেদন Approve বা Reject করতে পারবেন।
+
+একবার Verification Approve হলে Super Admin বাতিল না করা পর্যন্ত তা Permanent থাকবে।
+
+আগে আবেদন Reject হলেও User আবার আবেদন করতে পারবেন।
+
+### ৬. মূল Video Platform
+
+একটি Full-Screen, Smooth ও Autoplay-ভিত্তিক Video Viewing System তৈরি করুন।
+
+Main Navigation:
+
+- For You।
+- Following।
+- Explore।
+- Search।
+- Trending।
+- Profile।
+- Notifications।
+- Messenger।
+
+Video Requirements:
+
+- Main Video-এর সর্বোচ্চ Duration ১০ মিনিট।
+- Main Video Upload Format MP4।
+- Video Quality Optimization।
+- Original Video Storage।
+- Compressed Video Storage।
+- Internet Speed অনুযায়ী Playback Quality নির্বাচন।
+- Advanced Data Saver।
+- User নিজের ইচ্ছামতো Data Saver On/Off করতে পারবেন।
+- Data Saver চালু থাকলে শুধু পরবর্তী একটি Video Preload হবে।
+- Full-Screen Vertical Video Feed।
+- Video Screen-এ এলেই Autoplay।
+- Smooth Scroll Navigation।
+- সব Video-তে Sound Preference একই থাকবে।
+- Mute ও Unmute।
+- Playback Speed: 0.5x, 1x, 1.5x ও 2x।
+
+User-এর জন্য থাকবে:
+
+- Like।
+- Share।
+- Creator Follow।
+- Comment।
+- Video Statistics।
+- Login করার পর যোগ্য Public Video Download।
+
+Guest User Public Video দেখতে পারবেন।
+
+Public Video Download করতে Login করতে হবে।
+
+#### Video Visibility System
+
+Creator প্রতিটি Video Upload করার সময় Public অথবা Private নির্বাচন করতে পারবেন।
+
+**Public Video:**
+
+- সবাই দেখতে পারবেন।
+- Public Discovery-তে আসতে পারবে।
+- উপযুক্ত Feed ও Search-এ প্রদর্শিত হবে।
+
+**Private Video:**
+
+- শুধু Creator নিজে দেখতে পারবেন।
+- অন্য কেউ দেখতে পারবেন না।
+- Private Link দিয়েও দেখা যাবে না।
+- Public Search-এ আসবে না।
+- Trending-এ আসবে না।
+- Recommendation-এ আসবে না।
+- Public Feed-এ আসবে না।
+- অন্য কাউকে Access দেওয়া যাবে না।
+
+Upload করার পরেও Creator চাইলে Video-এর Visibility পরিবর্তন করতে পারবেন।
+
+Private Video-এর Security Frontend এবং Backend উভয় জায়গায় কার্যকর থাকতে হবে।
+
+### ৭. Video Upload ও Creator Controls
+
+একটি Advanced Video Upload System তৈরি করুন।
+
+Upload Process:
+
+১. Video Select।
+২. File Format Validation।
+৩. Duration ও Upload Limit Validation।
+৪. Secure Video Upload।
+৫. Video Processing ও Optimization।
+৬. Original ও Compressed Video Storage।
+৭. Automatic Thumbnail Generation।
+৮. Public অথবা Private নির্বাচন।
+৯. নির্বাচিত Visibility অনুযায়ী Publish।
+
+Creator Controls:
+
+- নিজের Video Manage।
+- Video Visibility Change।
+- নিজের Video Delete।
+- Comment Manage।
+- Comment Filter Manage।
+- Creator Analytics দেখা।
+- নিজের Video Category তৈরি।
+
+Creator নিজের Video Category তৈরি করতে পারবেন। এই Category শুধু সংশ্লিষ্ট Creator-এর কাছে দৃশ্যমান থাকবে।
+
+Super Admin মূল Video Upload Limit নিয়ন্ত্রণ করতে পারবেন।
+
+নিচের ফিচারগুলো থাকবে না:
+
+- Video Editing Tools।
+- Video Draft।
+- Video Playlist।
+- Video Pinning।
+- Stories।
+- Remix System।
+- Live Streaming।
+
+Creator Income বা Monetization System তৈরি করার প্রয়োজন নেই।
+
+### ৮. Video Discovery ও Search System
+
+একটি Advanced Video Search ও Discovery System তৈরি করুন।
+
+Search Sorting:
+
+- Relevance।
+- Most Popular।
+- Latest।
+
+অতিরিক্ত সুবিধা:
+
+- Hashtag System।
+- Trending Search।
+- Trending Videos।
+- Creator Discovery।
+- Video Category।
+- Search Suggestion।
+
+Trending Search Suggestion শুধু Super Admin নির্ধারণ করবেন।
+
+AI Smart Recommendation System তৈরি করুন, যা নিচের Engagement Signals বিশ্লেষণ করবে:
+
+- Like।
+- Share।
+- Following।
+- Viewing Behavior।
+- User Preference।
+- Creator Relationship।
+
+Recommendation System অবশ্যই Private Video, Block এবং Don't Recommend This Creator Preference মেনে চলবে।
+
+### ৯. Video Music Library
+
+একটি Centralized Music Library তৈরি করুন।
+
+সুবিধা:
+
+- Music Browsing।
+- Music Search।
+- Music Selection।
+- Original Audio Support।
+- Music Information।
+- Video-এর সঙ্গে Music Association।
+
+Super Admin পারবেন:
+
+- Music Upload করতে।
+- Music Manage করতে।
+- Music Information Edit করতে।
+- Music Delete করতে।
+- Music Availability নিয়ন্ত্রণ করতে।
+
+Music-এর Copyright ও Licensing Requirements অবশ্যই মেনে চলতে হবে।
+
+### ১০. Subtitle System
+
+একটি AI-Based Subtitle System তৈরি করুন।
+
+সুবিধা:
+
+- Automatic Subtitle Generation।
+- বাংলা Subtitle।
+- English Subtitle।
+- Manual Subtitle Creation।
+- Manual Subtitle Editing।
+- Subtitle Display Controls।
+- Subtitle Synchronization।
+
+Creator নিজের Video-এর Subtitle Manage করতে পারবেন।
+
+### ১১. সম্পূর্ণ Advanced Comment System
+
+প্রতিটি উপযুক্ত Video-এর সঙ্গে একটি সম্পূর্ণ Advanced Comment System তৈরি করুন।
+
+#### ১১.১ Comment Permission
+
+- শুধু Registered User Comment করতে পারবেন।
+- Guest User Comment করতে পারবেন না।
+- Guest User Comment দেখতে পারবেন না।
+- শুধু Login করা User Comment দেখতে পারবেন।
+- Creator নিজের Video-তে Comment করতে পারবেন।
+- Creator নিজের প্রতিটি Video-এর Comment On/Off করতে পারবেন।
+- Comment Off থাকলে নতুন Comment ও Reply দেওয়া যাবে না।
+- অন্য সব উপযুক্ত Video-তে Reply System চালু থাকবে।
+- Super Admin কখনো পুরো Platform-এর Comment System বন্ধ করতে পারবেন না।
+
+#### ১১.২ Comment Edit ও Delete
+
+User নিজের Comment যেকোনো সময় Edit করতে পারবেন।
+
+Edit করা Comment-এ Edited Label দেখাতে হবে।
+
+শুধু সর্বশেষ Version দেখা যাবে।
+
+আগের Version কেউ দেখতে পারবেন না।
+
+User নিজের Comment Delete করতে পারবেন।
+
+Creator নিজের Video-এর যেকোনো Comment Delete করতে পারবেন।
+
+Creator Comment Delete করলে Comment-এর মালিক Notification পাবেন।
+
+মূল Comment Delete হলে তার অধীনে থাকা সব Reply স্বয়ংক্রিয়ভাবে Delete হবে।
+
+#### ১১.৩ Comment Reply System
+
+- সম্পূর্ণ Reply System থাকবে।
+- সব উপযুক্ত User Comment-এর Reply দিতে পারবেন।
+- Comment চালু থাকা সব উপযুক্ত Video-তে Reply দেওয়া যাবে।
+- কোনো Nested Reply থাকবে না।
+- সব Reply মূল Comment-এর অধীনে থাকবে।
+- User নিজের Reply যেকোনো সময় Edit করতে পারবেন।
+- User নিজের Reply Delete করতে পারবেন।
+- Reply Count প্রদর্শিত হবে।
+
+#### ১১.৪ Comment Sorting ও Pinning
+
+শুধু Top Comments Sorting থাকবে।
+
+Comment-এর Like Count অনুযায়ী Ranking নির্ধারিত হবে।
+
+Reply Count Ranking-এ কোনো প্রভাব ফেলবে না।
+
+Pinned Comment সাধারণ Ranking-এর উপরে থাকবে।
+
+প্রতিটি Video-তে সর্বোচ্চ ১টি Comment Pin করা যাবে।
+
+Creator নিজের Video-এর Comment Pin ও Unpin করতে পারবেন।
+
+#### ১১.৫ Comment Like ও Reaction
+
+৬ ধরনের Reaction থাকবে:
+
+১. Like।
+২. Love।
+৩. Haha।
+৪. Wow।
+৫. Sad।
+৬. Angry।
+
+নিয়ম:
+
+- একজন User একটি Comment-এ শুধু একটি Active Reaction দিতে পারবেন।
+- Reaction পরিবর্তন ও Remove করা যাবে।
+- প্রতিটি Reaction-এর Count আলাদা থাকবে।
+- Comment দেখতে পারা সবাই Reaction List দেখতে পারবেন।
+- Reaction List-এ Username ও Profile Picture থাকবে।
+- Reaction পরিবর্তন হলে Count তাৎক্ষণিক আপডেট হবে।
+
+প্রতিটি Comment Reaction-এর জন্য Comment-এর মালিককে Notification পাঠাতে হবে।
+
+Reaction Notification বন্ধ করার কোনো User Option থাকবে না।
+
+#### ১১.৬ Creator Heart System
+
+Creator নিজের Video-এর Comment-এ বিশেষ Heart দিতে পারবেন।
+
+সুবিধা:
+
+- Creator Comment-এ Heart দিতে পারবেন।
+- Heart Remove করতে পারবেন।
+- Creator Heart সাধারণ Reaction থেকে আলাদাভাবে চিহ্নিত হবে।
+- Creator Heart দিলে Comment-এর মালিক Notification পাবেন।
+
+#### ১১.৭ Comment Character Limit
+
+Comment-এর জন্য প্রাথমিকভাবে Unlimited Character System থাকবে।
+
+তবে Super Admin চাইলে সর্বোচ্চ Character Limit নির্ধারণ করতে পারবেন।
+
+একইভাবে Comment ও Reply উভয়ের জন্য নির্ধারিত Limit কার্যকর হবে।
+
+#### ১১.৮ Comment Media Attachment
+
+একটি Comment-এ একসঙ্গে নিচের সব Media Type যুক্ত করা যাবে:
+
+- Text।
+- Image।
+- GIF।
+- Video।
+- Voice Message।
+
+Limit:
+
+- প্রতি Comment-এ সর্বোচ্চ ৫টি Image ও GIF।
+- প্রতি Comment-এ সর্বোচ্চ ১টি Video।
+- প্রতি Comment-এ সর্বোচ্চ ১টি Voice Message।
+
+একটি Comment-এ সব Media Type একসঙ্গে ব্যবহার করা যাবে।
+
+Media Size, Storage এবং Duration Limit Super Admin নিয়ন্ত্রণ করবেন।
+
+Creator ও Super Admin উভয়ের Storage Management থাকবে। তবে Super Admin-এর নির্ধারিত Global Maximum Limit অতিক্রম করা যাবে না।
+
+#### ১১.৯ Image ও GIF System
+
+সাধারণ Image ও GIF Format সাপোর্ট করতে হবে।
+
+সুবিধা:
+
+- Original Quality।
+- Original Resolution।
+- GIF Animation অক্ষত রাখা।
+- Quality কমিয়ে Automatic Compression করা যাবে না।
+- Preview।
+- Secure Upload।
+- Comment দেখতে পারা সবাই Download করতে পারবেন।
+- কোনো Watermark থাকবে না।
+- Creator নিজের Video-এর Comment-এর Image/GIF Delete করতে পারবেন।
+- User নিজের Comment-এর Attachment Manage করতে পারবেন।
+
+#### ১১.১০ Comment Video System
+
+MP4, MOV, WebM, AVI, MKV, M4V, 3GP এবং অন্যান্য সাধারণ Video Format সাপোর্ট করতে হবে।
+
+প্রকৃত Codec Compatibility পরীক্ষা করতে হবে।
+
+সুবিধা:
+
+- Original Quality।
+- Original Aspect Ratio।
+- Automatic Thumbnail Generation।
+- সবাই Download করতে পারবেন।
+- Original Format-এ Download হবে।
+- কোনো Watermark থাকবে না।
+- Secure Upload ও Media Processing।
+
+**Video Playback Rules:**
+
+- Comment Video স্বয়ংক্রিয়ভাবে Play করার ব্যবস্থা থাকবে।
+- Sound-On Autoplay করার চেষ্টা করতে হবে।
+- Browser Audible Autoplay Block করলে Browser-Compliant Interaction ব্যবহার করতে হবে।
+- এক সময়ে শুধু একটি Comment Video Play হবে।
+- নতুন Video Play হলে আগেরটি Pause হবে।
+- Video Screen থেকে চলে গেলে Automatically Pause হবে।
+- আবার Screen-এ এলে আগের Position থেকে Resume হবে।
+- একটি Video একবারই Play হবে।
+- Automatic Replay বা Loop থাকবে না।
+- সম্পূর্ণ Video Player Controls থাকবে।
+- Play/Pause।
+- Progress Bar ও Seek।
+- Volume।
+- Mute/Unmute।
+- Fullscreen।
+- Duration।
+- Playback Speed শুধু 1x।
+
+Portrait ও Landscape উভয় Fullscreen Orientation সাপোর্ট করতে হবে।
+
+#### ১১.১১ Comment Voice Message System
+
+দুইভাবে Voice Message পাঠানো যাবে:
+
+- Microphone দিয়ে Record।
+- Device থেকে Audio File Upload।
+
+MP3, WAV, AAC, M4A, OGG, FLAC এবং অন্যান্য সাধারণ Audio Format সাপোর্ট করতে হবে।
+
+Limit:
+
+- এক Comment-এ সর্বোচ্চ ১টি Voice Message।
+- স্থায়ী কোনো File Size Limit থাকবে না।
+- স্থায়ী কোনো Duration Limit থাকবে না।
+- Super Admin Upload Size ও Duration Limit নিয়ন্ত্রণ করবেন।
+
+**Recording System:**
+
+- Microphone Recording।
+- Send করার আগে Preview।
+- Re-record সুবিধা।
+- Audio Trim থাকবে না।
+- আলাদা Pre-Send Delete Control থাকবে না।
+- Original Audio Quality।
+- Secure Media Validation।
+
+**Voice Player:**
+
+- শুধু Play।
+- Pause।
+- Duration Display।
+- Waveform থাকবে না।
+- Automatic Playback থাকবে না।
+- Click করলে Play হবে।
+- এক সময়ে শুধু একটি Voice Message Play হবে।
+- অন্য Voice Play হলে আগের Voice Pause হবে।
+
+**Voice Download:**
+
+- সবাই Download করতে পারবেন।
+- Original Audio Format-এ Download হবে।
+- Original Quality থাকবে।
+- Watermark থাকবে না।
+
+#### ১১.১২ Optional Voice-to-Text System
+
+Voice-to-Text সম্পূর্ণ Optional থাকবে।
+
+User নিজে চাইলে শুধু তখনই Conversion চালু হবে।
+
+সাপোর্ট:
+
+- বাংলা।
+- ইংরেজি।
+- Automatic Language Detection।
+- বাংলা ও ইংরেজি Mixed Language Detection।
+
+Original Voice Message অপরিবর্তিত রাখতে হবে।
+
+Transcription Voice Message-এর নিচে দেখাতে হবে।
+
+Expand ও Collapse সুবিধা থাকবে।
+
+Voice Message-এর মালিক নিজের Transcription Edit করতে পারবেন।
+
+সবাই সর্বশেষ Edited Transcription দেখতে পারবেন।
+
+আগের Transcription Version দেখা যাবে না।
+
+সবাই Transcription Copy করতে পারবেন।
+
+Transcription-এর Translation System থাকবে না।
+
+Voice Message-এর মালিক Original Voice অক্ষত রেখে Transcription সবার জন্য Delete করতে পারবেন।
+
+Transcription Delete হলে:
+
+- Original Audio থাকবে।
+- Transcription সবার কাছ থেকে মুছে যাবে।
+- শুধু Voice Message-এর মালিক Notification পাবেন।
+- চাইলে আবার Voice-to-Text তৈরি করা যাবে।
+
+### ১২. Comment Notification System
+
+Comment-এর জন্য সম্পূর্ণ Notification System তৈরি করুন।
+
+Notification Event:
+
+- নতুন Comment।
+- Comment Reply।
+- Comment Reaction।
+- Creator Heart।
+- Creator কর্তৃক Comment Delete।
+- AI-Filtered Comment।
+
+Notification Recipient:
+
+- নতুন Comment এলে Video Creator Notification পাবেন।
+- Reply এলে মূল Comment-এর মালিক Notification পাবেন।
+- Reaction এলে Comment-এর মালিক Notification পাবেন।
+- Creator Heart দিলে Comment-এর মালিক Notification পাবেন।
+- Creator Comment Delete করলে Comment-এর মালিক Notification পাবেন।
+- AI Comment Filter করলে Creator Notification পাবেন।
+- Transcription Delete হলে শুধু Voice Message-এর মালিক Notification পাবেন।
+
+Notification-এ Click করলে সংশ্লিষ্ট Video ও Comment খুলতে হবে।
+
+### ১৩. AI Comment Moderation
+
+একটি Automatic AI Comment Moderation System তৈরি করুন।
+
+AI শনাক্ত করবে:
+
+- Spam।
+- Duplicate Comment।
+- Bad Words।
+- আপত্তিকর ভাষা।
+- সন্দেহজনক কার্যক্রম।
+- Rate-Limit Abuse।
+
+Creator নিজের Video অনুযায়ী Comment Filter On/Off করতে পারবেন।
+
+Filter চালু থাকলে:
+
+- AI সন্দেহজনক Comment শনাক্ত করবে।
+- Creator Notification পাবেন।
+- Filter করা Comment Review Section-এ থাকবে।
+- Creator প্রতিটি Comment-এর Action নির্ধারণ করবেন।
+- Action: Approve, Hide, Delete।
+
+Creator-এর Review Workflow অনুসরণ না করে সব Filter করা Comment স্বয়ংক্রিয়ভাবে মুছে ফেলা যাবে না।
+
+Moderation Audit Log রাখতে হবে।
+
+### ১৪. Report System সম্পূর্ণ নিষিদ্ধ
+
+BasharTube-এ কোনো ধরনের Report System থাকবে না।
+
+নিচের কোনো ফিচার তৈরি করা যাবে না:
+
+- Message Report।
+- Profile Report।
+- Video Report।
+- Comment Report।
+- Report Button।
+- Report Form।
+- Report Submission।
+- Report Dashboard।
+- Report Queue।
+
+User Report-এর ওপর নির্ভর না করে AI Moderation নিজে থেকেই কাজ করবে।
+
+তবে Block ও Unblock System চালু থাকবে।
+
+### ১৫. Comment Backup ও Deletion Policy
+
+প্রতিটি নতুন Comment এবং সংশ্লিষ্ট Media-এর পর Automatic Backup করতে হবে।
+
+Backup:
+
+- নতুন Comment হলে Backup।
+- নতুন Image/GIF হলে Backup।
+- Comment Video Upload হলে Backup।
+- Voice Message Upload হলে Backup।
+
+নিরাপদ Backup Storage ব্যবহার করতে হবে।
+
+Creator কোনো Video স্থায়ীভাবে Delete করলে সেই Video-এর সঙ্গে সম্পর্কিত সবকিছু Delete করতে হবে:
+
+- সব Comment।
+- সব Reply।
+- সব Comment Image।
+- সব GIF।
+- সব Comment Video।
+- সব Voice Message।
+- সংশ্লিষ্ট Backup Copy।
+
+Permanent Deletion সম্পন্ন হলে সংশ্লিষ্ট Data Restore করা যাবে না।
+
+### ১৬. সম্পূর্ণ Messenger System
+
+একটি Advanced Full-Featured Messenger তৈরি করুন।
+
+#### ১৬.১ Basic Messaging
+
+প্রতিটি Registered User অন্য Registered User-কে Message পাঠাতে পারবেন।
+
+শুধু One-to-One Private Chat থাকবে।
+
+Group Chat থাকবে না।
+
+Message Type:
+
+- Text।
+- Image।
+- Video।
+- Voice Message।
+- PDF Document।
+- Word Document।
+- Excel Document।
+- অন্যান্য সাধারণ Document ও File।
+
+Super Admin Messenger Storage Limit এবং Attachment Upload Restriction নিয়ন্ত্রণ করবেন।
+
+Messenger-এ পাঠানো Image ও Video Original Quality-তে থাকবে।
+
+#### ১৬.২ Message Status
+
+প্রতিটি Message-এর Status:
+
+- Sent।
+- Delivered।
+- Seen।
+
+সঠিক Delivery ও Reading Status প্রদর্শন করতে হবে।
+
+#### ১৬.৩ Message Edit ও Delete
+
+- Message যেকোনো সময় Edit করা যাবে।
+- Chat-এর সবাই আগের Message Version দেখতে পারবেন।
+- Delete for Me।
+- Delete for Everyone।
+
+Edited Message স্পষ্টভাবে চিহ্নিত করতে হবে এবং নির্ধারিত Message Version History রাখতে হবে।
+
+#### ১৬.৪ Messenger-এর অন্যান্য সুবিধা
+
+- Advanced Chat Search।
+- Typing Indicator।
+- User-controlled Typing Indicator On/Off।
+- Unlimited Chat Pin।
+- Custom Chat Wallpaper।
+- Wallpaper শুধু সংশ্লিষ্ট User-এর নিজের Chat Screen-এ কার্যকর হবে।
+- প্রতিটি নতুন Message-এর পর Automatic Backup।
+- Secure Attachment Handling।
+
+নিচের ফিচারগুলো থাকবে না:
+
+- Message Reaction।
+- Message Forwarding।
+- Message Reply System।
+- Chat Archive।
+- Chat Mute।
+- Disappearing Message।
+- Group Chat।
+
+User নিজের Chat History নির্ধারিত Delete for Me নিয়ম অনুযায়ী Delete করতে পারবেন।
+
+#### ১৬.৫ Messenger Voice Message
+
+- Unlimited Voice Message।
+- Super Admin Storage Limit নিয়ন্ত্রণ করবেন।
+- Normal 1x Playback Speed।
+- Voice Preview।
+- Send করার আগে Re-record।
+- Secure Voice Storage।
+- প্রয়োজনীয় Playback Controls।
+
+#### ১৬.৬ Voice ও Video Calling
+
+বাস্তব One-to-One Voice ও Video Calling System তৈরি করতে হবে।
+
+Block ও Account Restrictions সাপেক্ষে সব Registered User অন্য User-কে Call করতে পারবেন।
+
+সুবিধা:
+
+- Incoming Call।
+- Outgoing Call।
+- Missed Call।
+- Voice Call।
+- Video Call।
+- Call Duration।
+- Call History।
+- Missed Call Notification।
+
+Call History-তে থাকবে:
+
+- Select।
+- Delete।
+- Clear All।
+
+### ১৭. Notification System
+
+একটি Advanced Notification Center তৈরি করুন।
+
+Notification Category:
+
+- Likes।
+- Comments।
+- Follows।
+- Messages।
+- Calls।
+- Creator Heart।
+- অন্যান্য অনুমোদিত Platform Activity।
+
+কোনো @Mention System নেই, তাই Mention Notification তৈরি করা যাবে না।
+
+Notification Delivery:
+
+- Website Notification।
+- Browser Push Notification।
+- Email Notification।
+
+User Notification Sound On/Off করতে পারবেন।
+
+কোনো DND Mode থাকবে না।
+
+Notification Management:
+
+- Read।
+- Unread।
+- Select।
+- Delete।
+- Clear All।
+
+User Delete না করা পর্যন্ত Notification সংরক্ষিত থাকবে, তবে Account Deletion ও প্রযোজ্য Data Policy অনুসরণ করতে হবে।
+
+Notification Count-এর জন্য Red Badge থাকবে।
+
+### ১৮. Parental Safety ও Kids System
+
+একটি সম্পূর্ণ Parental Safety System তৈরি করুন।
+
+এতে থাকবে:
+
+- Parent Account।
+- Child Account।
+- Kids Mode।
+- Kids Messenger।
+- Parent Controls।
+
+Parent নিজের Child Account-এর Activity এবং Messaging-এর ওপর উপযুক্ত নিয়ন্ত্রণ রাখতে পারবেন।
+
+বয়স অনুযায়ী উপযুক্ত Interface ও Access Control তৈরি করতে হবে।
+
+শিশুদের জন্য নিষিদ্ধ Content অ্যাক্সেস প্রতিরোধ করতে হবে।
+
+### ১৯. AI Video Moderation ও Account Safety
+
+একটি AI-Based Video Safety System তৈরি করুন।
+
+AI স্বয়ংক্রিয়ভাবে Upload করা Video পরীক্ষা করবে।
+
+শনাক্ত করবে:
+
+- আপত্তিকর Content।
+- নিষিদ্ধ Material।
+- বিপজ্জনক Content।
+- Platform Policy Violation।
+
+নির্ধারিত Removal Criteria পূরণ করলে Video স্বয়ংক্রিয়ভাবে Remove করবে।
+
+এছাড়াও থাকবে:
+
+- AI Moderation।
+- Duplicate Comment Detection।
+- Spam Detection।
+- Rate Limiting।
+- Automatic Temporary Account Suspension।
+- ৩০ দিনের AI Suspension ব্যবস্থা।
+- Super Admin-এর চূড়ান্ত Administrative Authority।
+
+সাধারণ User-এর জন্য এমন কোনো Appeal Workflow তৈরি করা যাবে না যেখানে Platform Policy অনুযায়ী AI-এর সিদ্ধান্ত চূড়ান্ত।
+
+Moderation Record ও Administrative Log সংরক্ষণ করতে হবে।
+
+### ২০. Admin Panel
+
+একটি সম্পূর্ণ Professional Admin Panel তৈরি করুন।
+
+এখান থেকে অনুমোদিত Administrator নিচের বিষয়গুলো Manage করতে পারবেন:
+
+- User Management।
+- Video Management।
+- Creator Management।
+- Comment Moderation।
+- Media Storage Management।
+- Upload Restrictions।
+- Music Library।
+- Trending Search Terms।
+- Verification Requests।
+- Notifications।
+- AI Moderation Settings।
+- Platform Analytics।
+- Security Logs।
+
+### ২১. Super Admin Panel
+
+পুরো Platform-এ ঠিক একজন Super Admin থাকবেন।
+
+Super Admin-এর সর্বোচ্চ Administrative Authority থাকবে।
+
+Super Admin Login-এর জন্য শক্তিশালী Authentication এবং অতিরিক্ত Security Verification থাকতে হবে।
+
+Super Admin-এর সুবিধা:
+
+**User Management**
+
+- সব User দেখা।
+- Account Manage।
+- Verification Request Manage।
+- Account Restriction Manage।
+- Suspension Manage।
+- প্রয়োজন অনুযায়ী Verification বাতিল।
+
+**Video Management**
+
+- Upload Limit নির্ধারণ।
+- Platform Video Manage।
+- Music Availability Manage।
+- Trending Search Term Manage।
+
+**Comment Management**
+
+- সব Comment দেখা।
+- সব Reply দেখা।
+- অনুমোদিত Comment Media দেখা।
+- Comment Search।
+- যেকোনো User-এর Comment Hide।
+- Comment Unhide।
+- Moderation Activity Review।
+
+**Storage Management**
+
+- Global Storage Limit নির্ধারণ।
+- Upload File Size Limit নির্ধারণ।
+- Duration Limit নির্ধারণ।
+- Media Usage Monitor।
+- Storage Usage Manage।
+
+**Platform Security**
+
+- Audit Log দেখা।
+- Security Settings Manage।
+- Moderation Action Review।
+- সন্দেহজনক কার্যক্রম পর্যবেক্ষণ।
+
+**বিশেষ নিষেধাজ্ঞা:**
+
+Super Admin কখনো পুরো Platform-এর Comment System Disable করতে পারবেন না।
+
+তবে Creator নিজের Video-এর Comment আলাদাভাবে On/Off করতে পারবেন।
+
+### ২২. Verification System
+
+একটি Professional Verification Management Interface তৈরি করুন।
+
+User নিচের তথ্য দিয়ে Verification Request পাঠাতে পারবেন:
+
+- Verification Request।
+- Profile Details।
+- Verification Explanation।
+- Supporting Documents।
+
+Super Admin আবেদন Review করে Approve অথবা Reject করবেন।
+
+Approve হলে Super Admin বাতিল না করা পর্যন্ত Verification Permanent থাকবে।
+
+আগের আবেদন Reject হলেও User আবার আবেদন করতে পারবেন।
+
+### ২৩. Privacy ও Security
+
+Security পুরো Application-এর প্রতিটি অংশে কার্যকর থাকতে হবে।
+
+অবশ্যই বাস্তবায়ন করতে হবে:
+
+- HTTPS।
+- Secure Password Hashing।
+- Protected Authentication Session।
+- Role-Based Access Control।
+- Ownership Validation।
+- Rate Limiting।
+- Input Validation।
+- File Type ও Content Validation।
+- Secure Upload Processing।
+- Malware Scanning, যেখানে সমর্থিত।
+- XSS Protection।
+- CSRF Protection, যেখানে প্রযোজ্য।
+- SQL Injection Protection।
+- Secure APIs।
+- Private Media Authorization।
+- Secure Access Token Management।
+- Administrative Audit Logging।
+- Backup Protection।
+
+কোনো Sensitive User Information Public API-এর মাধ্যমে প্রকাশ করা যাবে না।
+
+Private Video বা Private Message-এর জন্য Publicly Accessible Storage URL ব্যবহার করা যাবে না।
+
+Frontend-এ Button লুকিয়ে রাখাই যথেষ্ট নয়। Backend-এও প্রতিটি Action-এর Permission Check করতে হবে।
+
+### ২৪. Database Design
+
+একটি Normalized ও Scalable Relational Database তৈরি করুন।
+
+Database-এ নিচের Entity ও Table থাকবে:
+
+- Users।
+- User Profiles।
+- Authentication Sessions।
+- Devices।
+- Followers।
+- Following।
+- Videos।
+- Video Visibility।
+- Video Categories।
+- Hashtags।
+- Video Likes।
+- Shares।
+- Comments।
+- Comment Replies।
+- Comment Reactions।
+- Creator Hearts।
+- Pinned Comments।
+- Comment Attachments।
+- Voice Messages।
+- Voice Transcriptions।
+- Comment Filter Records।
+- Creator Blocked Commenters।
+- Music Library।
+- Subtitles।
+- Notifications।
+- Chats।
+- Chat Participants।
+- Messages।
+- Message Attachments।
+- Message Edit History।
+- Calls।
+- Call History।
+- Verification Requests।
+- Verification Documents।
+- Parental Relationships।
+- Kids Settings।
+- Moderation Records।
+- Storage Usage।
+- Backup Records।
+- Admin Settings।
+- Audit Logs।
+
+উপযুক্ত Index, Foreign Key, Constraint, Transaction Management ও Deletion Policy ব্যবহার করতে হবে।
+
+অনুমতি ছাড়া কোনো User-এর Private Data দেখা বা Fetch করা যাবে না।
+
+### ২৫. Performance ও Scalability
+
+ভবিষ্যতে অনেক User একসঙ্গে ব্যবহার করলেও Website যেন ভালোভাবে কাজ করে, সেইভাবে তৈরি করতে হবে।
+
+গুরুত্বপূর্ণ বিষয়:
+
+- দ্রুত Video Loading।
+- CDN Integration।
+- Efficient Media Delivery।
+- দ্রুত API Response।
+- Database Indexing।
+- Background Processing।
+- Queue-Based Video Processing।
+- Queue-Based Notifications।
+- Real-Time Messenger Updates।
+- Efficient Image Delivery।
+- Efficient Search।
+- Storage Monitoring।
+- Retry Mechanism।
+- Error Recovery।
+- Horizontal Scalability।
+
+ভারী Media Processing সরাসরি সাধারণ Web Request-এর মধ্যে করা যাবে না।
+
+এর জন্য Asynchronous Worker ব্যবহার করতে হবে।
+
+### ২৬. Website-এর প্রয়োজনীয় সব Page
+
+নিচের সব Page তৈরি করতে হবে:
+
+১. Home Page।
+২. For You Page।
+৩. Following Page।
+৪. Explore Page।
+৫. Trending Page।
+৬. Search Page।
+৭. Video Details Page।
+৮. Creator Profile Page।
+৯. User Profile Page।
+১০. Registration Page।
+১১. Login Page।
+১২. Password Recovery Page।
+১৩. Edit Profile Page।
+১৪. Settings Page।
+১৫. Notification Page।
+১৬. Messenger Inbox।
+১৭. Individual Chat Page।
+১৮. Voice Call Page।
+১৯. Video Call Page।
+২০. Call History Page।
+২১. Music Library Page।
+২২. Verification Request Page।
+২৩. Verification Status Page।
+২৪. Parent Dashboard।
+২৫. Kids Mode।
+২৬. Kids Messenger।
+২৭. Creator Analytics।
+২৮. Creator Dashboard।
+২৯. Admin Dashboard।
+৩০. Super Admin Dashboard।
+৩১. Privacy ও Security Settings।
+৩২. Custom Error Pages।
+
+### ২৭. Final Implementation Requirements
+
+শুধু Frontend Design তৈরি করে কাজ শেষ করা যাবে না।
+
+সম্পূর্ণ Application-এর সঙ্গে থাকতে হবে:
+
+- Complete Frontend।
+- Functional Backend।
+- Database Schema ও Migrations।
+- Registration ও Authentication।
+- Working Video Upload ও Playback।
+- কার্যকর Public/Private Video Access।
+- সম্পূর্ণ কার্যকর Comment System।
+- Comment Media Upload।
+- Voice-to-Text Workflow।
+- Complete Messenger।
+- Real-Time Voice ও Video Calling Infrastructure।
+- Notification System।
+- AI Integration Points।
+- Admin Panel।
+- Super Admin Panel।
+- Storage Management।
+- Secure Access Controls।
+- Automated Testing।
+- Deployment Documentation।
+
+Website-এর প্রতিটি Button, Form, Navigation, Setting ও Action কার্যকর হতে হবে।
+
+শুধু দেখতে সুন্দর কিন্তু কাজ করে না—এমন Decorative Control তৈরি করা যাবে না।
+
+বাস্তব API Response-এর পরিবর্তে Fake API Response ব্যবহার করা যাবে না।
+
+যেসব Feature-এর জন্য External Service দরকার, সেগুলোর জন্য যথাযথ Integration Interface তৈরি করতে হবে।
+
+প্রয়োজনীয় API Credential, Environment Variable এবং External Service Configuration Documentation দিতে হবে।
+
+কোনো Secret বা API Key Frontend Code-এ প্রকাশ করা যাবে না।
+
+### ২৮. চূড়ান্ত মান ও ফলাফল
+
+BasharTube এমন একটি Professional Social Media Platform হতে হবে, যা বাস্তব ব্যবহারের উপযোগী করে তৈরি করা হয়েছে।
+
+চূড়ান্ত Website-এর বৈশিষ্ট্য:
+
+- Modern।
+- Premium।
+- Secure।
+- Scalable।
+- Responsive।
+- Fast।
+- User-Friendly।
+- Fully Integrated।
+- Maintainable।
+- Production Deployment-এর জন্য প্রস্তুত।
+
+সম্পূর্ণ Platform-এর Design BasharTube Branding অনুযায়ী রাখতে হবে।
+
+নতুন Application-এর কোথাও পুরোনো নাম "Bashar Shorts" ব্যবহার করা যাবে না।
+
+Video Streaming, Social Interaction, Messenger, Notification, Administration, Security এবং Parental Control—সবকিছু একটি Unified Platform-এর মধ্যে তৈরি করতে হবে।
+
+**প্রধান নির্দেশনা:**
+
+একটি সম্পূর্ণ কার্যকর, Professional Full-Stack BasharTube Website তৈরি করুন। শুধু Design Demonstration বা Static Mockup তৈরি করবেন না।
+
+প্রয়োজনীয় Infrastructure, External Service Configuration এবং Testing সম্পন্ন করার পর বাস্তব Deployment-এর উপযোগী হতে হবে।

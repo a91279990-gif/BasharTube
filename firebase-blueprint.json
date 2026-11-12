@@ -1,0 +1,300 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and account information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "username": { "type": "string", "description": "Unique username", "maxLength": 50 },
+        "displayName": { "type": "string", "description": "Full display name", "maxLength": 100 },
+        "bio": { "type": "string", "description": "User biography", "maxLength": 500 },
+        "avatarUrl": { "type": "string", "description": "Profile picture URL" },
+        "coverUrl": { "type": "string", "description": "Banner cover URL" },
+        "websiteUrl": { "type": "string", "description": "Personal website URL", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["user", "creator", "admin", "superadmin"] },
+        "isVerified": { "type": "boolean", "description": "Creator verification badge" },
+        "isKidsAccount": { "type": "boolean", "description": "Child account flag" },
+        "parentUid": { "type": "string", "description": "UID of linked parent account if child" },
+        "followersCount": { "type": "number", "description": "Total followers count" },
+        "followingCount": { "type": "number", "description": "Total following count" },
+        "totalLikes": { "type": "number", "description": "Total likes received" },
+        "totalViews": { "type": "number", "description": "Total video views" },
+        "totalShares": { "type": "number", "description": "Total video shares" },
+        "isSuspended": { "type": "boolean", "description": "Temporary account suspension status" },
+        "createdAt": { "type": "string", "description": "Creation ISO date" },
+        "updatedAt": { "type": "string", "description": "Last update ISO date" }
+      },
+      "required": ["id", "username", "displayName"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "Shared video item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Video document ID" },
+        "authorId": { "type": "string", "description": "Creator UID" },
+        "authorName": { "type": "string", "description": "Creator display name" },
+        "authorUsername": { "type": "string", "description": "Creator username" },
+        "authorAvatar": { "type": "string", "description": "Creator avatar URL" },
+        "isAuthorVerified": { "type": "boolean", "description": "Creator verification status" },
+        "title": { "type": "string", "description": "Video title", "maxLength": 200 },
+        "description": { "type": "string", "description": "Video description", "maxLength": 1000 },
+        "videoUrl": { "type": "string", "description": "Video streaming URL" },
+        "thumbnailUrl": { "type": "string", "description": "Video thumbnail preview" },
+        "duration": { "type": "number", "description": "Duration in seconds" },
+        "category": { "type": "string", "description": "Video genre/category", "maxLength": 60 },
+        "visibility": { "type": "string", "enum": ["public", "private"] },
+        "viewsCount": { "type": "number", "description": "Video views" },
+        "likesCount": { "type": "number", "description": "Likes count" },
+        "sharesCount": { "type": "number", "description": "Shares count" },
+        "commentsCount": { "type": "number", "description": "Comments count" },
+        "commentsEnabled": { "type": "boolean", "description": "Whether comments are open on this video" },
+        "musicTitle": { "type": "string", "description": "Background music title" },
+        "musicArtist": { "type": "string", "description": "Background music artist" },
+        "hasSubtitles": { "type": "boolean", "description": "Whether subtitles are available" },
+        "subtitlesBn": { "type": "string", "description": "Bengali subtitles content" },
+        "subtitlesEn": { "type": "string", "description": "English subtitles content" },
+        "aiModerationStatus": { "type": "string", "enum": ["approved", "flagged", "removed"] },
+        "isKidsSafe": { "type": "boolean", "description": "Suitable for kids mode" },
+        "createdAt": { "type": "string", "description": "Publish date" }
+      },
+      "required": ["id", "authorId", "title", "videoUrl", "visibility"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Video comment with multi-media and reactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Comment ID" },
+        "videoId": { "type": "string", "description": "Target video ID" },
+        "authorId": { "type": "string", "description": "Commenter UID" },
+        "authorName": { "type": "string", "description": "Commenter display name" },
+        "authorUsername": { "type": "string", "description": "Commenter username" },
+        "authorAvatar": { "type": "string", "description": "Commenter avatar URL" },
+        "isAuthorVerified": { "type": "boolean", "description": "Commenter verification" },
+        "text": { "type": "string", "description": "Text content of comment", "maxLength": 5000 },
+        "isEdited": { "type": "boolean", "description": "Edited badge flag" },
+        "isPinned": { "type": "boolean", "description": "Creator pinned comment flag" },
+        "hasCreatorHeart": { "type": "boolean", "description": "Creator loved this comment" },
+        "likesCount": { "type": "number", "description": "Total positive reactions count" },
+        "repliesCount": { "type": "number", "description": "Total direct replies count" },
+        "mediaImages": { "type": "string", "description": "JSON string or URL array of attached images" },
+        "mediaVideoUrl": { "type": "string", "description": "Attached comment video URL" },
+        "voiceUrl": { "type": "string", "description": "Attached voice message URL" },
+        "voiceDuration": { "type": "number", "description": "Voice duration in seconds" },
+        "voiceTranscription": { "type": "string", "description": "Optional voice-to-text text" },
+        "aiModerationStatus": { "type": "string", "enum": ["approved", "flagged", "hidden"] },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "videoId", "authorId"]
+    },
+    "CommentReaction": {
+      "title": "CommentReaction",
+      "description": "User reaction to a comment (like, love, haha, wow, sad, angry)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Composite key commentId_userId" },
+        "commentId": { "type": "string", "description": "Comment ID" },
+        "userId": { "type": "string", "description": "Reactor UID" },
+        "username": { "type": "string", "description": "Reactor username" },
+        "userAvatar": { "type": "string", "description": "Reactor avatar URL" },
+        "reactionType": { "type": "string", "enum": ["like", "love", "haha", "wow", "sad", "angry"] },
+        "createdAt": { "type": "string", "description": "Timestamp" }
+      },
+      "required": ["id", "commentId", "userId", "reactionType"]
+    },
+    "CommentReply": {
+      "title": "CommentReply",
+      "description": "Direct reply to a top-level comment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Reply ID" },
+        "commentId": { "type": "string", "description": "Parent Comment ID" },
+        "videoId": { "type": "string", "description": "Parent Video ID" },
+        "authorId": { "type": "string", "description": "Author UID" },
+        "authorName": { "type": "string", "description": "Author display name" },
+        "authorUsername": { "type": "string", "description": "Author username" },
+        "authorAvatar": { "type": "string", "description": "Author avatar URL" },
+        "text": { "type": "string", "description": "Reply message", "maxLength": 3000 },
+        "isEdited": { "type": "boolean", "description": "Whether reply was edited" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "commentId", "videoId", "authorId", "text"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "One-to-one conversation between two registered users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique conversation ID" },
+        "participantIds": { "type": "string", "description": "Comma separated or serialized UIDs" },
+        "userAId": { "type": "string", "description": "First participant UID" },
+        "userBId": { "type": "string", "description": "Second participant UID" },
+        "lastMessageText": { "type": "string", "description": "Snippet of last message", "maxLength": 200 },
+        "lastMessageSenderId": { "type": "string", "description": "Sender UID of last message" },
+        "lastMessageAt": { "type": "string", "description": "Timestamp of last message" },
+        "updatedAt": { "type": "string", "description": "Updated timestamp" }
+      },
+      "required": ["id", "userAId", "userBId"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Direct message in one-to-one chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "chatId": { "type": "string", "description": "Parent Chat ID" },
+        "senderId": { "type": "string", "description": "Sender UID" },
+        "recipientId": { "type": "string", "description": "Recipient UID" },
+        "text": { "type": "string", "description": "Text content", "maxLength": 4000 },
+        "messageType": { "type": "string", "enum": ["text", "image", "video", "voice", "file"] },
+        "mediaUrl": { "type": "string", "description": "Media attachment URL" },
+        "fileName": { "type": "string", "description": "Name of uploaded document/file" },
+        "voiceDuration": { "type": "number", "description": "Voice audio duration" },
+        "status": { "type": "string", "enum": ["sent", "delivered", "seen"] },
+        "isEdited": { "type": "boolean", "description": "Whether message was edited" },
+        "isDeletedForEveryone": { "type": "boolean", "description": "Deleted for everyone flag" },
+        "createdAt": { "type": "string", "description": "Sent timestamp" }
+      },
+      "required": ["id", "chatId", "senderId", "recipientId"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "Voice or video call session record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call ID" },
+        "callerId": { "type": "string", "description": "Caller UID" },
+        "callerName": { "type": "string", "description": "Caller display name" },
+        "callerAvatar": { "type": "string", "description": "Caller avatar" },
+        "receiverId": { "type": "string", "description": "Receiver UID" },
+        "receiverName": { "type": "string", "description": "Receiver display name" },
+        "receiverAvatar": { "type": "string", "description": "Receiver avatar" },
+        "type": { "type": "string", "enum": ["voice", "video"] },
+        "status": { "type": "string", "enum": ["calling", "accepted", "declined", "missed", "ended"] },
+        "duration": { "type": "number", "description": "Call duration in seconds" },
+        "createdAt": { "type": "string", "description": "Initiation timestamp" }
+      },
+      "required": ["id", "callerId", "receiverId", "type", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Notification ID" },
+        "userId": { "type": "string", "description": "Target recipient UID" },
+        "actorId": { "type": "string", "description": "Actor who triggered notification" },
+        "actorName": { "type": "string", "description": "Actor display name" },
+        "actorAvatar": { "type": "string", "description": "Actor avatar URL" },
+        "type": { "type": "string", "enum": ["like", "comment", "reply", "reaction", "creator_heart", "follow", "comment_deleted", "message", "call_missed", "verification_update"] },
+        "title": { "type": "string", "description": "Notification title", "maxLength": 150 },
+        "message": { "type": "string", "description": "Notification description", "maxLength": 500 },
+        "linkUrl": { "type": "string", "description": "Destination route" },
+        "isRead": { "type": "boolean", "description": "Read flag" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "type", "title"]
+    },
+    "Music": {
+      "title": "Music",
+      "description": "Centralized music track in the library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Music ID" },
+        "title": { "type": "string", "description": "Track title", "maxLength": 100 },
+        "artist": { "type": "string", "description": "Artist name", "maxLength": 100 },
+        "audioUrl": { "type": "string", "description": "Music audio file URL" },
+        "coverUrl": { "type": "string", "description": "Track cover image" },
+        "duration": { "type": "number", "description": "Duration in seconds" },
+        "useCount": { "type": "number", "description": "Total videos using this music" },
+        "isAvailable": { "type": "boolean", "description": "Admin toggle availability" }
+      },
+      "required": ["id", "title", "artist", "audioUrl"]
+    },
+    "VerificationRequest": {
+      "title": "VerificationRequest",
+      "description": "Creator badge verification application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Request document ID" },
+        "userId": { "type": "string", "description": "Applicant UID" },
+        "username": { "type": "string", "description": "Applicant username" },
+        "displayName": { "type": "string", "description": "Applicant name" },
+        "reason": { "type": "string", "description": "Application statement", "maxLength": 1000 },
+        "supportingDocUrl": { "type": "string", "description": "Proof document URL" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "description": "Submission date" }
+      },
+      "required": ["id", "userId", "reason"]
+    },
+    "PlatformSettings": {
+      "title": "PlatformSettings",
+      "description": "Global administrator configurations",
+      "type": "object",
+      "properties": {
+        "maxVideoDurationSeconds": { "type": "number", "description": "Max video length in seconds (default 600)" },
+        "maxVideoUploadSizeMB": { "type": "number", "description": "Max upload size in MB" },
+        "maxCommentLength": { "type": "number", "description": "Max character limit for comments" },
+        "trendingSearchTerms": { "type": "string", "description": "Comma separated trending terms" }
+      },
+      "required": ["maxVideoDurationSeconds"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Public user profiles"
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Platform administrator documents"
+    },
+    "/videos/{videoId}": {
+      "schema": { "$ref": "Video" },
+      "description": "Uploaded public and private videos"
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "Comment" },
+      "description": "Video comments with media attachments"
+    },
+    "/comment_reactions/{reactionId}": {
+      "schema": { "$ref": "CommentReaction" },
+      "description": "Reactions to comments"
+    },
+    "/comment_replies/{replyId}": {
+      "schema": { "$ref": "CommentReply" },
+      "description": "Replies to comments"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "Chat" },
+      "description": "One-to-one chats"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "Message" },
+      "description": "Messages within a one-to-one chat"
+    },
+    "/calls/{callId}": {
+      "schema": { "$ref": "Call" },
+      "description": "Voice and video call log entries"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "Notification" },
+      "description": "User notification stream"
+    },
+    "/music/{musicId}": {
+      "schema": { "$ref": "Music" },
+      "description": "Centralized audio track catalog"
+    },
+    "/verification_requests/{requestId}": {
+      "schema": { "$ref": "VerificationRequest" },
+      "description": "Verification applications submitted by users"
+    },
+    "/platform_settings/{settingId}": {
+      "schema": { "$ref": "PlatformSettings" },
+      "description": "System wide configurable parameters"
+    }
+  }
+}

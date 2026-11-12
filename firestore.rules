@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return (
+        (request.auth != null && request.auth.token.email == 'a91279990@gmail.com') ||
+        (request.resource != null && request.resource.data.authorEmail == 'a91279990@gmail.com')
+      );
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Admin collection
+    match /admins/{userId} {
+      allow read, write: if true;
+    }
+
+    // Videos: Seamless public discovery and upload
+    match /videos/{videoId} {
+      allow read, write: if true;
+    }
+
+    // Video Likes
+    match /video_likes/{likeId} {
+      allow read, write: if true;
+    }
+
+    // Follows
+    match /follows/{followId} {
+      allow read, write: if true;
+    }
+
+    // Comments
+    match /comments/{commentId} {
+      allow read, write: if true;
+    }
+
+    // Comment Reactions
+    match /comment_reactions/{reactionId} {
+      allow read, write: if true;
+    }
+
+    // Comment Replies
+    match /comment_replies/{replyId} {
+      allow read, write: if true;
+    }
+
+    // Direct Chats & Messages
+    match /chats/{chatId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // Voice and Video Calls
+    match /calls/{callId} {
+      allow read, write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Music Catalog
+    match /music/{musicId} {
+      allow read, write: if true;
+    }
+
+    // Verification Requests
+    match /verification_requests/{requestId} {
+      allow read, write: if true;
+    }
+
+    // Platform Configuration
+    match /platform_settings/{settingId} {
+      allow read, write: if true;
+    }
+  }
+}

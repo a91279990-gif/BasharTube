@@ -1,0 +1,6 @@
+{
+  "name": "BasharTube",
+  "description": "Professional Social Video Platform for Bangladesh & the World with Video Sharing, Messenger, and Cloud Security.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
