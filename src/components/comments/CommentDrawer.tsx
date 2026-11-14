@@ -84,6 +84,7 @@ export const CommentDrawer: React.FC<CommentDrawerProps> = ({
   const [voiceUrl, setVoiceUrl] = useState<string>('');
   const [voiceDuration, setVoiceDuration] = useState<number>(0);
   const [voiceTranscription, setVoiceTranscription] = useState<string>('');
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   
   // Audio recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -145,9 +146,10 @@ export const CommentDrawer: React.FC<CommentDrawerProps> = ({
     const files = e.target.files;
     if (!files) return;
     if (attachedImages.length + files.length > 5) {
-      alert(language === 'bn' ? 'প্রতি কমেন্টে সর্বোচ্চ ৫টি ছবি বা GIF যুক্ত করা যাবে।' : 'Maximum 5 images or GIFs allowed per comment.');
+      setAttachmentError(language === 'bn' ? 'প্রতি কমেন্টে সর্বোচ্চ ৫টি ছবি বা GIF যুক্ত করা যাবে।' : 'Maximum 5 images or GIFs allowed per comment.');
       return;
     }
+    setAttachmentError(null);
     const newUrls: string[] = [];
     Array.from(files).forEach(f => {
       newUrls.push(URL.createObjectURL(f));
@@ -731,6 +733,13 @@ export const CommentDrawer: React.FC<CommentDrawerProps> = ({
                 >
                   {t('stopRecord')}
                 </button>
+              </div>
+            )}
+
+            {attachmentError && (
+              <div className="mb-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400 flex items-center justify-between">
+                <span>{attachmentError}</span>
+                <button type="button" onClick={() => setAttachmentError(null)} className="text-rose-300 font-bold ml-2">×</button>
               </div>
             )}
 

@@ -20,12 +20,14 @@ import { useMessenger } from '../../context/MessengerContext';
 
 interface SidebarProps {
   onOpenSettings: () => void;
+  onOpenAiStudio: () => void;
   isMobileSidebarOpen: boolean;
   onCloseMobileSidebar: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
+  onOpenAiStudio,
   isMobileSidebarOpen,
   onCloseMobileSidebar
 }) => {
@@ -40,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'foryou' as FeedType, label: t('forYou'), icon: Home },
     { id: 'following' as FeedType, label: t('following'), icon: Users },
     { id: 'explore' as FeedType, label: t('explore'), icon: Compass },
-    { id: 'trending' as FeedType, label: t('trending'), icon: Flame, badge: 'HOT' },
+    { id: 'trending' as FeedType, label: t('trending'), icon: Flame },
     { id: 'messenger' as any, label: t('messenger'), icon: MessageCircle, count: totalUnreadMessages },
     { id: 'calls' as any, label: t('callHistory'), icon: PhoneCall },
     { id: 'profile' as FeedType, label: t('profile'), icon: User },
@@ -80,23 +82,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                className={`w-full flex items-center justify-between px-3.5 min-h-[44px] rounded-xl text-sm font-medium transition ${
                   isActive
-                    ? 'bg-gradient-to-r from-cyan-500/15 to-transparent text-cyan-400 border-l-4 border-cyan-400 font-semibold'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                    ? 'bg-cyan-500/12 text-cyan-300 border border-cyan-500/25 font-semibold'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-zinc-400'}`} />
                   <span>{item.label}</span>
                 </div>
-                {item.badge && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-pink-500/20 text-pink-400 border border-pink-500/30 animate-pulse">
-                    {item.badge}
-                  </span>
-                )}
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-500 text-black">
+                  <span className="text-[11px] font-bold font-mono tabular-nums text-cyan-400">
                     {item.count}
                   </span>
                 )}
@@ -104,13 +101,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
 
+          {/* BasharTube AI Studio */}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenAiStudio();
+              onCloseMobileSidebar();
+            }}
+            className="w-full flex items-center justify-between px-3.5 min-h-[44px] rounded-xl text-sm font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/25 transition my-1"
+          >
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span>BasharTube AI</span>
+            </div>
+            <span className="text-[10px] font-bold text-cyan-400 tracking-wider">
+              STUDIO
+            </span>
+          </button>
+
           {/* Dedicated Protected Admin Panel with Security Lock */}
           <button
             onClick={() => handleNavClick('admin')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+            className={`w-full flex items-center justify-between px-3.5 min-h-[44px] rounded-xl text-sm font-medium transition ${
               activeFeed === ('admin' as any)
-                ? 'bg-gradient-to-r from-pink-500/20 to-transparent text-pink-400 border-l-4 border-pink-400 font-semibold shadow-inner'
-                : 'text-pink-400/90 hover:text-pink-300 hover:bg-pink-950/20'
+                ? 'bg-pink-500/12 text-pink-300 border border-pink-500/25 font-semibold'
+                : 'text-pink-400/90 hover:text-pink-300 hover:bg-pink-950/20 border border-transparent'
             }`}
           >
             <div className="flex items-center gap-3">
@@ -118,20 +133,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>{t('adminPanel')}</span>
             </div>
             {isAdminUnlocked ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+              <span className="text-[10px] text-emerald-400 font-bold tracking-wide">
                 UNLOCKED
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400 font-bold border border-zinc-700">
-                <Lock className="w-2.5 h-2.5" />
-                <span>ভল্ট</span>
-              </span>
+              <Lock className="w-3.5 h-3.5 text-zinc-500" />
             )}
           </button>
 
           <button
             onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
+            className="w-full flex items-center gap-3 px-3.5 min-h-[44px] rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
           >
             <Settings className="w-4 h-4 text-zinc-400" />
             <span>{t('settings')}</span>

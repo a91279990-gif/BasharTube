@@ -1,26 +1,79 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  collection, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
-  orderBy 
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  collection,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db } from '../firebase';
 import { VideoItem, VideoVisibility } from '../types';
-import { INITIAL_VIDEOS, DEFAULT_PLATFORM_SETTINGS } from '../data/mockData';
 import { useAuth } from './AuthContext';
+import { resolveVideoFormat } from '../utils/videoFormat';
+import { saveVideoBlob, getVideoBlobUrl, deleteVideoBlob } from '../utils/videoStorage';
+import {
+  FeedType,
+  VideoFormatFilter,
+  filterHomeFeedVideos,
+  isPlayableVideoUrl,
+  mergeRemoteVideosWithLocalMedia,
+  resolveActiveVideoId,
+  sanitizeStoredVideos,
+} from '../utils/videoFeedSync';
+import { propagateProfileToVideos } from '../utils/profileSync';
 
-export type FeedType = 'foryou' | 'following' | 'explore' | 'trending' | 'profile';
+export type { FeedType, VideoFormatFilter };
+
+const STORAGE_KEY = 'bashartube_uploaded_videos';
+
+function inferExtensionFromBlob(blob: Blob, filename?: string): string {
+  if (filename) {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.webm')) return 'webm';
+    if (lower.endsWith('.mov')) return 'mov';
+    if (lower.endsWith('.m4v')) return 'm4v';
+    if (lower.endsWith('.mp4')) return 'mp4';
+  }
+  const type = (blob.type || '').toLowerCase();
+  if (type.includes('webm')) return 'webm';
+  if (type.includes('quicktime')) return 'mov';
+  return 'mp4';
+}
+
+async function uploadVideoFileToServer(
+  videoId: string,
+  rawFile: Blob,
+  filename?: string
+): Promise<string | null> {
+  try {
+    const ext = inferExtensionFromBlob(rawFile, filename);
+    const response = await fetch('/api/videos/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': rawFile.type || 'application/octet-stream',
+        'x-video-id': videoId,
+        'x-video-ext': ext,
+      },
+      body: rawFile,
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { ok?: boolean; videoUrl?: string };
+    return data?.ok && data.videoUrl ? data.videoUrl : null;
+  } catch {
+    return null;
+  }
+}
 
 interface VideoContextType {
   videos: VideoItem[];
   filteredVideos: VideoItem[];
   activeFeed: FeedType;
   setActiveFeed: (feed: FeedType) => void;
+  formatFilter: VideoFormatFilter;
+  setFormatFilter: (filter: VideoFormatFilter) => void;
   activeVideoId: string | null;
   setActiveVideoId: (id: string | null) => void;
   likedVideoIds: Set<string>;
@@ -29,7 +82,14 @@ interface VideoContextType {
   incrementViews: (videoId: string) => Promise<void>;
   followedCreatorIds: Set<string>;
   toggleFollowCreator: (creatorId: string) => void;
-  uploadVideo: (videoData: Omit<VideoItem, 'id' | 'viewsCount' | 'likesCount' | 'sharesCount' | 'commentsCount' | 'createdAt'>) => Promise<VideoItem>;
+  uploadVideo: (
+    videoData: Omit<
+      VideoItem,
+      'id' | 'viewsCount' | 'likesCount' | 'sharesCount' | 'commentsCount' | 'createdAt'
+    >,
+    rawFile?: Blob | null,
+    originalFilename?: string
+  ) => Promise<VideoItem>;
   deleteVideo: (videoId: string) => Promise<void>;
   updateVideoVisibility: (videoId: string, visibility: VideoVisibility) => Promise<void>;
   toggleVideoComments: (videoId: string, enabled: boolean) => Promise<void>;
@@ -47,15 +107,23 @@ const VideoContext = createContext<VideoContextType | undefined>(undefined);
 
 export const VideoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, preferences, isSuperAdmin } = useAuth();
+
+  const localMediaUrlRef = useRef<Map<string, string>>(new Map());
+  const pendingLocalIdsRef = useRef<Set<string>>(new Set());
+  const attemptedHydrationIdsRef = useRef<Set<string>>(new Set());
+
   const [videos, setVideos] = useState<VideoItem[]>(() => {
     try {
-      const saved = localStorage.getItem('bashartube_uploaded_videos');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? sanitizeStoredVideos(parsed) : [];
     } catch {
       return [];
     }
   });
   const [activeFeed, setActiveFeed] = useState<FeedType>('foryou');
+  const [formatFilter, setFormatFilter] = useState<VideoFormatFilter>('short');
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [likedVideoIds, setLikedVideoIds] = useState<Set<string>>(new Set());
   const [followedCreatorIds, setFollowedCreatorIds] = useState<Set<string>>(new Set());
@@ -64,70 +132,136 @@ export const VideoProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [activeSubtitleLang, setActiveSubtitleLang] = useState<'off' | 'bn' | 'en'>('bn');
 
-  // Real-time listener for Firestore /videos
+  const persistVideos = (updated: VideoItem[]) => {
+    try {
+      const serializable = updated.map((v) => ({
+        ...v,
+        videoUrl: v.videoUrl?.startsWith('blob:') ? '' : v.videoUrl,
+        hasStoredBlob: Boolean(v.hasStoredBlob || v.videoUrl?.startsWith('blob:')),
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
+    } catch {}
+  };
+
+  // Re-hydrate any videos missing an active URL from IndexedDB
+  useEffect(() => {
+    let cancelled = false;
+    const candidates = videos.filter(
+      (v) =>
+        !isPlayableVideoUrl(v.videoUrl) &&
+        v.hasStoredBlob &&
+        !localMediaUrlRef.current.has(v.id) &&
+        !attemptedHydrationIdsRef.current.has(v.id)
+    );
+    if (candidates.length === 0) return;
+
+    (async () => {
+      const updates = new Map<string, string>();
+      for (const vid of candidates) {
+        attemptedHydrationIdsRef.current.add(vid.id);
+        const freshUrl = await getVideoBlobUrl(vid.id);
+        if (freshUrl) {
+          localMediaUrlRef.current.set(vid.id, freshUrl);
+          updates.set(vid.id, freshUrl);
+        }
+      }
+      if (cancelled || updates.size === 0) return;
+      setVideos((prev) =>
+        prev.map((v) => (updates.has(v.id) ? { ...v, videoUrl: updates.get(v.id)! } : v))
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videos]);
+
+  // Real-time listener for Firestore /videos (only real uploaded videos)
   useEffect(() => {
     try {
       const q = query(collection(db, 'videos'), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const firestoreVideos: VideoItem[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreVideos.push({ id: docSnap.id, ...docSnap.data() } as VideoItem);
-        });
-        if (firestoreVideos.length > 0) {
-          setVideos(firestoreVideos);
-          try {
-            localStorage.setItem('bashartube_uploaded_videos', JSON.stringify(firestoreVideos));
-          } catch {}
-          if (!activeVideoId && firestoreVideos[0]) {
-            setActiveVideoId(firestoreVideos[0].id);
-          }
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const firestoreVideos: VideoItem[] = [];
+          snapshot.forEach((docSnap) => {
+            firestoreVideos.push({ id: docSnap.id, ...docSnap.data() } as VideoItem);
+          });
+
+          setVideos((prev) => {
+            const merged = mergeRemoteVideosWithLocalMedia(
+              firestoreVideos,
+              prev,
+              localMediaUrlRef.current,
+              pendingLocalIdsRef.current
+            );
+            persistVideos(merged);
+            const playable = merged.filter((m) => isPlayableVideoUrl(m.videoUrl));
+            setActiveVideoId((prevActive) => resolveActiveVideoId(playable, prevActive));
+            return merged;
+          });
+        },
+        (error) => {
+          console.warn('Firestore videos listener notice:', error.message);
         }
-      }, (error) => {
-        console.warn("Firestore videos listener notice:", error.message);
-      });
+      );
       return () => unsubscribe();
     } catch {
       // Local fallback
     }
-  }, [activeVideoId]);
+  }, []);
 
-  // Filter videos based on Active Feed, Visibility, Blocked Users, and Preferences
-  const filteredVideos = videos.filter((video) => {
-    // 1. Private video rule: Only author or superadmin can view!
-    if (video.visibility === 'private') {
-      const isAuthor = currentUser && currentUser.id === video.authorId;
-      if (!isAuthor && !isSuperAdmin) {
-        return false;
-      }
-    }
+  // Automatically propagate profile updates (channelName/displayName, handle, avatar) to author's videos
+  useEffect(() => {
+    if (!currentUser) return;
+    const expectedAuthorName = (currentUser.channelName || currentUser.displayName || '').trim();
+    const expectedUsername = (currentUser.username || '').trim();
+    const expectedAvatar = currentUser.avatarUrl || '';
 
-    // 2. Blocked users rule:
-    if (preferences.blockedUserIds.includes(video.authorId)) {
-      return false;
-    }
+    const videosToUpdate = videos.filter(
+      (v) =>
+        v.authorId === currentUser.id &&
+        (v.authorName !== expectedAuthorName ||
+          v.authorUsername !== expectedUsername ||
+          v.authorAvatar !== expectedAvatar ||
+          v.isAuthorVerified !== currentUser.isVerified)
+    );
 
+    if (videosToUpdate.length === 0) return;
 
-    if (activeFeed === 'following') {
-      return followedCreatorIds.has(video.authorId);
-    }
+    setVideos((prev) => {
+      const next = propagateProfileToVideos(prev, currentUser);
+      persistVideos(next);
+      return next;
+    });
 
-    if (activeFeed === 'trending') {
-      // Don't recommend list
-      if (preferences.dontRecommendCreatorIds.includes(video.authorId)) {
-        return false;
-      }
-      return video.likesCount > 1000 || video.viewsCount > 50000;
-    }
+    videosToUpdate.forEach((vid) => {
+      updateDoc(doc(db, 'videos', vid.id), {
+        authorName: expectedAuthorName || vid.authorName,
+        authorUsername: expectedUsername || vid.authorUsername,
+        authorAvatar: expectedAvatar || vid.authorAvatar,
+        isAuthorVerified: currentUser.isVerified,
+      }).catch(() => {});
+    });
+  }, [
+    currentUser?.id,
+    currentUser?.displayName,
+    currentUser?.channelName,
+    currentUser?.username,
+    currentUser?.handle,
+    currentUser?.avatarUrl,
+    currentUser?.isVerified,
+    videos.length,
+  ]);
 
-    if (activeFeed === 'foryou') {
-      // Respect Don't Recommend filter
-      if (preferences.dontRecommendCreatorIds.includes(video.authorId)) {
-        return false;
-      }
-      return true;
-    }
-
-    return true;
+  const filteredVideos = filterHomeFeedVideos(videos, {
+    activeFeed,
+    formatFilter,
+    currentUserId: currentUser?.id,
+    isSuperAdmin,
+    followedCreatorIds,
+    blockedUserIds: preferences.blockedUserIds,
+    dontRecommendCreatorIds: preferences.dontRecommendCreatorIds,
   });
 
   const toggleLikeVideo = async (videoId: string) => {
@@ -140,54 +274,68 @@ export const VideoProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     setLikedVideoIds(newLiked);
 
-    setVideos(prev => prev.map(v => {
-      if (v.id === videoId) {
-        return { ...v, likesCount: Math.max(0, v.likesCount + (isLiked ? -1 : 1)) };
-      }
-      return v;
-    }));
+    let nextLikesCount = 0;
+    setVideos((prev) => {
+      const updated = prev.map((v) => {
+        if (v.id === videoId) {
+          nextLikesCount = Math.max(0, v.likesCount + (isLiked ? -1 : 1));
+          return { ...v, likesCount: nextLikesCount };
+        }
+        return v;
+      });
+      persistVideos(updated);
+      return updated;
+    });
 
     try {
-      const videoRef = doc(db, 'videos', videoId);
-      const target = videos.find(v => v.id === videoId);
-      if (target) {
-        await updateDoc(videoRef, {
-          likesCount: Math.max(0, target.likesCount + (isLiked ? -1 : 1))
-        });
-      }
+      await updateDoc(doc(db, 'videos', videoId), { likesCount: nextLikesCount });
     } catch {
-      // state updated optimistically
+      // Optimistically updated locally
     }
   };
 
   const incrementShare = async (videoId: string) => {
-    setVideos(prev => prev.map(v => v.id === videoId ? { ...v, sharesCount: v.sharesCount + 1 } : v));
+    let nextShares = 0;
+    setVideos((prev) => {
+      const updated = prev.map((v) => {
+        if (v.id === videoId) {
+          nextShares = v.sharesCount + 1;
+          return { ...v, sharesCount: nextShares };
+        }
+        return v;
+      });
+      persistVideos(updated);
+      return updated;
+    });
     try {
-      const videoRef = doc(db, 'videos', videoId);
-      const target = videos.find(v => v.id === videoId);
-      if (target) {
-        await updateDoc(videoRef, { sharesCount: target.sharesCount + 1 });
-      }
+      await updateDoc(doc(db, 'videos', videoId), { sharesCount: nextShares });
     } catch {
-      // state updated
+      // Optimistically updated locally
     }
   };
 
   const incrementViews = async (videoId: string) => {
-    setVideos(prev => prev.map(v => v.id === videoId ? { ...v, viewsCount: v.viewsCount + 1 } : v));
+    let nextViews = 0;
+    setVideos((prev) => {
+      const updated = prev.map((v) => {
+        if (v.id === videoId) {
+          nextViews = v.viewsCount + 1;
+          return { ...v, viewsCount: nextViews };
+        }
+        return v;
+      });
+      persistVideos(updated);
+      return updated;
+    });
     try {
-      const videoRef = doc(db, 'videos', videoId);
-      const target = videos.find(v => v.id === videoId);
-      if (target) {
-        await updateDoc(videoRef, { viewsCount: target.viewsCount + 1 });
-      }
+      await updateDoc(doc(db, 'videos', videoId), { viewsCount: nextViews });
     } catch {
-      // state updated
+      // Optimistically updated locally
     }
   };
 
   const toggleFollowCreator = (creatorId: string) => {
-    setFollowedCreatorIds(prev => {
+    setFollowedCreatorIds((prev) => {
       const next = new Set(prev);
       if (next.has(creatorId)) {
         next.delete(creatorId);
@@ -199,130 +347,218 @@ export const VideoProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const uploadVideo = async (
-    videoData: Omit<VideoItem, 'id' | 'viewsCount' | 'likesCount' | 'sharesCount' | 'commentsCount' | 'createdAt'>
+    videoData: Omit<
+      VideoItem,
+      'id' | 'viewsCount' | 'likesCount' | 'sharesCount' | 'commentsCount' | 'createdAt'
+    >,
+    rawFile?: Blob | null,
+    originalFilename?: string
   ): Promise<VideoItem> => {
-    const newVideo: VideoItem = {
+    let stableId = 'vid_' + Date.now();
+    try {
+      stableId = doc(collection(db, 'videos')).id;
+    } catch {
+      // fallback ID
+    }
+
+    pendingLocalIdsRef.current.add(stableId);
+
+    // 1. Create an immediate live playback URL (never reuse a modal-ephemeral blob URL that could be revoked)
+    let immediatePlayableUrl = videoData.videoUrl || '';
+    let hasStoredBlob = Boolean(videoData.hasStoredBlob);
+
+    if (rawFile && rawFile.size > 0) {
+      immediatePlayableUrl = URL.createObjectURL(rawFile);
+      hasStoredBlob = true;
+      await saveVideoBlob(stableId, rawFile);
+    }
+
+    if (immediatePlayableUrl) {
+      localMediaUrlRef.current.set(stableId, immediatePlayableUrl);
+      attemptedHydrationIdsRef.current.add(stableId);
+    }
+
+    const optimisticVideo: VideoItem = {
       ...videoData,
-      id: 'vid_' + Date.now(),
+      id: stableId,
+      videoUrl: immediatePlayableUrl,
+      videoFormat: resolveVideoFormat(videoData),
+      hasStoredBlob,
       viewsCount: 1,
       likesCount: 0,
       sharesCount: 0,
       commentsCount: 0,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
-    setVideos(prev => {
-      const updated = [newVideo, ...prev];
-      try {
-        localStorage.setItem('bashartube_uploaded_videos', JSON.stringify(updated));
-      } catch {}
+    // 2. Immediately show on Home Feed under its own format ('short' or 'long') and activate this video
+    const targetFormat = resolveVideoFormat(videoData);
+    setVideos((prev) => {
+      const updated = [optimisticVideo, ...prev.filter((p) => p.id !== stableId)];
+      persistVideos(updated);
       return updated;
     });
-
-    setActiveVideoId(newVideo.id);
+    setFormatFilter(targetFormat);
+    setActiveVideoId(stableId);
     setActiveFeed('foryou');
 
+    // 3. Persist real video binary to server media storage so it survives reloads/origins/devices
+    let persistentUrl =
+      immediatePlayableUrl && !immediatePlayableUrl.startsWith('blob:')
+        ? immediatePlayableUrl
+        : '';
+
+    if (rawFile && rawFile.size > 0) {
+      const uploadedServerUrl = await uploadVideoFileToServer(
+        stableId,
+        rawFile,
+        originalFilename
+      );
+      if (uploadedServerUrl) {
+        persistentUrl = uploadedServerUrl;
+        localMediaUrlRef.current.set(stableId, persistentUrl);
+        setVideos((prev) => {
+          const updated = prev.map((v) =>
+            v.id === stableId ? { ...v, videoUrl: persistentUrl } : v
+          );
+          persistVideos(updated);
+          return updated;
+        });
+      }
+    }
+
+    // 4. Write metadata + persistent videoUrl to Firestore
     try {
-      const docRef = await addDoc(collection(db, 'videos'), {
-        authorId: newVideo.authorId,
-        authorName: newVideo.authorName,
-        authorUsername: newVideo.authorUsername,
-        authorAvatar: newVideo.authorAvatar,
-        isAuthorVerified: newVideo.isAuthorVerified,
-        title: newVideo.title,
-        description: newVideo.description,
-        videoUrl: newVideo.videoUrl,
-        thumbnailUrl: newVideo.thumbnailUrl,
-        duration: newVideo.duration,
-        category: newVideo.category,
-        visibility: newVideo.visibility,
+      await setDoc(doc(db, 'videos', stableId), {
+        authorId: optimisticVideo.authorId,
+        authorName: optimisticVideo.authorName,
+        authorUsername: optimisticVideo.authorUsername,
+        authorAvatar: optimisticVideo.authorAvatar,
+        isAuthorVerified: optimisticVideo.isAuthorVerified,
+        title: optimisticVideo.title,
+        description: optimisticVideo.description,
+        videoUrl: persistentUrl,
+        hasStoredBlob,
+        thumbnailUrl: optimisticVideo.thumbnailUrl || '',
+        duration: optimisticVideo.duration,
+        videoFormat: optimisticVideo.videoFormat,
+        videoWidth: optimisticVideo.videoWidth || 0,
+        videoHeight: optimisticVideo.videoHeight || 0,
+        aspectRatio: optimisticVideo.aspectRatio || 0,
+        category: optimisticVideo.category,
+        visibility: optimisticVideo.visibility,
         viewsCount: 1,
         likesCount: 0,
         sharesCount: 0,
         commentsCount: 0,
-        commentsEnabled: newVideo.commentsEnabled,
-        musicTitle: newVideo.musicTitle || '',
-        musicArtist: newVideo.musicArtist || '',
-        hasSubtitles: newVideo.hasSubtitles,
-        subtitles: newVideo.subtitles || {},
+        commentsEnabled: optimisticVideo.commentsEnabled,
+        hasSubtitles: optimisticVideo.hasSubtitles,
+        subtitles: optimisticVideo.subtitles || {},
+        aiSummary: optimisticVideo.aiSummary || '',
+        aiChapters: optimisticVideo.aiChapters || [],
+        aiTags: optimisticVideo.aiTags || [],
         aiModerationStatus: 'approved',
-        isKidsSafe: newVideo.isKidsSafe,
-        createdAt: newVideo.createdAt
+        isKidsSafe: false,
+        createdAt: optimisticVideo.createdAt,
       });
-      newVideo.id = docRef.id;
     } catch (err) {
-      console.warn("Firestore video upload notice:", err);
+      console.warn('Firestore video upload notice:', err);
+    } finally {
+      pendingLocalIdsRef.current.delete(stableId);
     }
 
-    return newVideo;
+    return {
+      ...optimisticVideo,
+      videoUrl: persistentUrl || immediatePlayableUrl,
+    };
   };
 
   const deleteVideo = async (videoId: string) => {
-    setVideos(prev => {
-      const updated = prev.filter(v => v.id !== videoId);
-      try {
-        localStorage.setItem('bashartube_uploaded_videos', JSON.stringify(updated));
-      } catch {}
+    const existing = videos.find((v) => v.id === videoId);
+    localMediaUrlRef.current.delete(videoId);
+    pendingLocalIdsRef.current.delete(videoId);
+
+    setVideos((prev) => {
+      const updated = prev.filter((v) => v.id !== videoId);
+      persistVideos(updated);
+      const playable = updated.filter((m) => isPlayableVideoUrl(m.videoUrl));
+      setActiveVideoId((curr) => (curr === videoId ? resolveActiveVideoId(playable, null) : curr));
       return updated;
     });
+
+    await deleteVideoBlob(videoId);
+    if (existing?.videoUrl?.startsWith('/api/videos/stream/')) {
+      const fname = existing.videoUrl.split('/').pop();
+      if (fname) {
+        fetch(`/api/videos/stream/${encodeURIComponent(fname)}`, { method: 'DELETE' }).catch(
+          () => {}
+        );
+      }
+    }
     try {
       await deleteDoc(doc(db, 'videos', videoId));
     } catch (err) {
-      console.warn("Delete video error:", err);
+      console.warn('Delete video error:', err);
     }
   };
 
   const updateVideoVisibility = async (videoId: string, visibility: VideoVisibility) => {
-    setVideos(prev => {
-      const updated = prev.map(v => v.id === videoId ? { ...v, visibility } : v);
-      try {
-        localStorage.setItem('bashartube_uploaded_videos', JSON.stringify(updated));
-      } catch {}
+    setVideos((prev) => {
+      const updated = prev.map((v) => (v.id === videoId ? { ...v, visibility } : v));
+      persistVideos(updated);
       return updated;
     });
     try {
       await updateDoc(doc(db, 'videos', videoId), { visibility });
     } catch (err) {
-      console.warn("Update visibility error:", err);
+      console.warn('Update visibility error:', err);
     }
   };
 
   const toggleVideoComments = async (videoId: string, enabled: boolean) => {
-    setVideos(prev => prev.map(v => v.id === videoId ? { ...v, commentsEnabled: enabled } : v));
+    setVideos((prev) => {
+      const updated = prev.map((v) => (v.id === videoId ? { ...v, commentsEnabled: enabled } : v));
+      persistVideos(updated);
+      return updated;
+    });
     try {
       await updateDoc(doc(db, 'videos', videoId), { commentsEnabled: enabled });
     } catch (err) {
-      console.warn("Toggle video comments error:", err);
+      console.warn('Toggle video comments error:', err);
     }
   };
 
   return (
-    <VideoContext.Provider value={{
-      videos,
-      filteredVideos,
-      activeFeed,
-      setActiveFeed,
-      activeVideoId,
-      setActiveVideoId,
-      likedVideoIds,
-      toggleLikeVideo,
-      incrementShare,
-      incrementViews,
-      followedCreatorIds,
-      toggleFollowCreator,
-      uploadVideo,
-      deleteVideo,
-      updateVideoVisibility,
-      toggleVideoComments,
-      selectedQuality,
-      setSelectedQuality,
-      playbackSpeed,
-      setPlaybackSpeed,
-      isMuted,
-      setIsMuted,
-      activeSubtitleLang,
-      setActiveSubtitleLang
-    }}>
+    <VideoContext.Provider
+      value={{
+        videos,
+        filteredVideos,
+        activeFeed,
+        setActiveFeed,
+        formatFilter,
+        setFormatFilter,
+        activeVideoId,
+        setActiveVideoId,
+        likedVideoIds,
+        toggleLikeVideo,
+        incrementShare,
+        incrementViews,
+        followedCreatorIds,
+        toggleFollowCreator,
+        uploadVideo,
+        deleteVideo,
+        updateVideoVisibility,
+        toggleVideoComments,
+        selectedQuality,
+        setSelectedQuality,
+        playbackSpeed,
+        setPlaybackSpeed,
+        isMuted,
+        setIsMuted,
+        activeSubtitleLang,
+        setActiveSubtitleLang,
+      }}
+    >
       {children}
     </VideoContext.Provider>
   );

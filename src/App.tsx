@@ -7,6 +7,7 @@ import { MessengerProvider } from './context/MessengerContext';
 import { CallProvider } from './context/CallContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { MonetizationProvider } from './context/MonetizationContext';
+import { resolveVideoFormat } from './utils/videoFormat';
 
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
@@ -22,14 +23,16 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { NotificationsView } from './components/notifications/NotificationsView';
 import { AuthModal } from './components/auth/AuthModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { BasharTubeAiStudioModal } from './components/ai/BasharTubeAiStudioModal';
 
 const MainAppContent: React.FC = () => {
-  const { activeFeed, setActiveFeed } = useVideo();
+  const { videos, activeFeed, setActiveFeed, setActiveVideoId, setFormatFilter } = useVideo();
 
   // Modal triggers
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAiStudioOpen, setIsAiStudioOpen] = useState(false);
   const [activeCommentVideoId, setActiveCommentVideoId] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -39,6 +42,11 @@ const MainAppContent: React.FC = () => {
   };
 
   const handleSelectVideoFromGrid = (videoId: string) => {
+    const target = videos.find((v) => v.id === videoId);
+    if (target) {
+      setFormatFilter(resolveVideoFormat(target));
+    }
+    setActiveVideoId(videoId);
     setActiveFeed('foryou');
   };
 
@@ -49,6 +57,7 @@ const MainAppContent: React.FC = () => {
         onOpenUpload={() => setIsUploadOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenAiStudio={() => setIsAiStudioOpen(true)}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         isMobileSidebarOpen={isMobileSidebarOpen}
       />
@@ -58,6 +67,7 @@ const MainAppContent: React.FC = () => {
         {/* Left Sidebar */}
         <Sidebar
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenAiStudio={() => setIsAiStudioOpen(true)}
           isMobileSidebarOpen={isMobileSidebarOpen}
           onCloseMobileSidebar={() => setIsMobileSidebarOpen(false)}
         />
@@ -69,6 +79,7 @@ const MainAppContent: React.FC = () => {
               onOpenComments={handleOpenComments}
               onOpenAuth={() => setIsAuthOpen(true)}
               onOpenUpload={() => setIsUploadOpen(true)}
+              onOpenAiStudio={() => setIsAiStudioOpen(true)}
             />
           )}
 
@@ -126,6 +137,13 @@ const MainAppContent: React.FC = () => {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* BasharTube AI Studio Modal */}
+      <BasharTubeAiStudioModal
+        isOpen={isAiStudioOpen}
+        onClose={() => setIsAiStudioOpen(false)}
+        onOpenUpload={() => setIsUploadOpen(true)}
       />
     </div>
   );

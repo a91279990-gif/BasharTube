@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   Globe, 
@@ -24,15 +24,13 @@ import {
   AlertCircle,
   CheckCircle2,
   AtSign,
-  Copy,
   Check,
   Camera,
   Wallet,
-  DollarSign,
   TrendingUp,
-  ArrowDownRight,
   Sparkles,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useVideo } from '../../context/VideoContext';
@@ -40,6 +38,9 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useMonetization } from '../../context/MonetizationContext';
 import { SocialMediaLink } from '../../types';
 import { normalizeHandle, validateHandleFormat } from '../../utils/handleValidation';
+import { calculateViewsIncome, calculateWatchTimeIncome } from '../../utils/monetizationEngine';
+import { computeCreatorAnalytics, formatWebsiteUrl } from '../../utils/profileSync';
+import { compressAvatarImageFile } from '../../utils/imageCompression';
 import { MonetizationProgressBar } from './MonetizationProgressBar';
 
 interface ProfileViewProps {
@@ -55,15 +56,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     currentUser, 
     updateProfile, 
     deviceSessions,
-    logoutSession,
     invalidateSessionWithToken,
     deleteAccountWithPassword,
     changeSecurityQuestion,
+    changePassword,
     updateSocialLinks,
     checkHandleAvailability
   } = useAuth();
   const { videos, deleteVideo, updateVideoVisibility } = useVideo();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const {
     creatorMonetizationStatus,
     eligibilityMetrics,
@@ -81,38 +82,43 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isSecurityQModalOpen, setIsSecurityQModalOpen] = useState(false);
 
-  // Edit form states
+  // Edit form states (synced cleanly every time Edit Modal opens)
   const [editName, setEditName] = useState(currentUser?.displayName || '');
   const [editChannelName, setEditChannelName] = useState(currentUser?.channelName || '');
+  const [editEmail, setEditEmail] = useState(currentUser?.email || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editWebsite, setEditWebsite] = useState(currentUser?.websiteUrl || '');
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatarUrl || '');
   const [editHandle, setEditHandle] = useState(currentUser?.handle || ('@' + (currentUser?.username || '')));
   const [handleCollisionError, setHandleCollisionError] = useState<string | null>(null);
   const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
-  const [isCheckingHandle, setIsCheckingHandle] = useState(false);
+  const [profileEditError, setProfileEditError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
   const [logoFileError, setLogoFileError] = useState<string | null>(null);
+  const [profileToast, setProfileToast] = useState<string | null>(null);
 
   // Monetization modals and forms state
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [originalCertified, setOriginalCertified] = useState(false);
   const [applyNote, setApplyNote] = useState('');
+  const [applyError, setApplyError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
 
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState<number>(10000);
+  const [withdrawAmount, setWithdrawAmount] = useState<number>(monetizationConfig.minWithdrawalAmount || 10000);
   const [bKashNum, setBKashNum] = useState(currentUser?.bKashNumber || '');
   const [bKashType, setBKashType] = useState<'personal' | 'agent' | 'merchant'>(currentUser?.bKashAccountType || 'personal');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [monetizationFeedback, setMonetizationFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
 
-  // Social Links state (Item 9)
+  // Social Links state
   const [socialLinksList, setSocialLinksList] = useState<SocialMediaLink[]>(currentUser?.socialLinks || []);
   const [newPlatform, setNewPlatform] = useState<SocialMediaLink['platform']>('facebook');
   const [newUrl, setNewUrl] = useState('');
   const [socialError, setSocialError] = useState<string | null>(null);
 
-  // Change Security Question states (Item 3)
+  // Change Security Question states
   const [currentPassForQ, setCurrentPassForQ] = useState('');
   const [newQuestionText, setNewQuestionText] = useState('আপনার প্রথম স্কুলের নাম কী?');
   const [newAnswerText, setNewAnswerText] = useState('');
@@ -120,7 +126,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [qSuccess, setQSuccess] = useState<string | null>(null);
   const [isQLoading, setIsQLoading] = useState(false);
 
-  // Delete Account states (Item 7)
+  // Change Password states
+  const [currPassInput, setCurrPassInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [confirmPassInput, setConfirmPassInput] = useState('');
+  const [passFeedback, setPassFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
+  const [isChangingPass, setIsChangingPass] = useState(false);
+
+  // Delete Account states
   const [deletePass, setDeletePass] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -129,6 +142,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [verifyReason, setVerifyReason] = useState('');
   const [verifyDocUrl, setVerifyDocUrl] = useState('');
   const [isVerificationSubmitted, setIsVerificationSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setSocialLinksList(currentUser.socialLinks || []);
+    setBKashNum(currentUser.bKashNumber || '');
+    setBKashType(currentUser.bKashAccountType || 'personal');
+  }, [currentUser?.id, currentUser?.socialLinks, currentUser?.bKashNumber, currentUser?.bKashAccountType]);
+
+  const openEditModal = () => {
+    if (!currentUser) return;
+    setEditName(currentUser.displayName || '');
+    setEditChannelName(currentUser.channelName || currentUser.displayName || '');
+    setEditEmail(currentUser.email || '');
+    setEditBio(currentUser.bio || '');
+    setEditWebsite(currentUser.websiteUrl || '');
+    setEditAvatar(currentUser.avatarUrl || '');
+    setEditHandle(currentUser.handle || `@${currentUser.username || ''}`);
+    setHandleCollisionError(null);
+    setHandleSuggestions([]);
+    setProfileEditError(null);
+    setLogoFileError(null);
+    setIsEditModalOpen(true);
+  };
 
   if (!currentUser) {
     return (
@@ -147,7 +183,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </p>
         <button
           onClick={onOpenAuth}
-          className="px-7 py-3 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-cyan-400 text-white font-black text-sm hover:brightness-110 active:scale-95 transition shadow-xl shadow-pink-500/25"
+          className="min-h-[44px] px-7 py-3 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-cyan-400 text-white font-black text-sm hover:brightness-110 active:scale-95 transition shadow-xl shadow-pink-500/25"
         >
           লগইন / নতুন অ্যাকাউন্ট তৈরি করুন
         </button>
@@ -155,13 +191,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     );
   }
 
-  // Filter creator's published videos (Strictly NO featured video section per item 10)
+  // Filter creator's published videos
   const myVideos = videos.filter(v => v.authorId === currentUser.id);
-  const totalViews = myVideos.reduce((acc, v) => acc + (v.viewsCount || 0), 0);
-  const totalLikes = myVideos.reduce((acc, v) => acc + (v.likesCount || 0), 0);
-  const totalShares = myVideos.reduce((acc, v) => acc + (v.sharesCount || 0), 0);
+  const creatorAnalytics = computeCreatorAnalytics(myVideos);
+  const totalViews = creatorAnalytics.totalViews;
+  const totalLikes = creatorAnalytics.totalLikes;
+  const totalShares = creatorAnalytics.totalShares;
+  const activeHandle = currentUser.handle || `@${currentUser.username}`;
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setLogoFileError(null);
     const file = e.target.files?.[0];
     if (!file) return;
@@ -176,13 +214,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setEditAvatar(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsProcessingLogo(true);
+    try {
+      const compressedDataUrl = await compressAvatarImageFile(file, 320, 0.82);
+      setEditAvatar(compressedDataUrl);
+    } catch {
+      setLogoFileError('ছবিটি প্রসেস করা যায়নি। অনুগ্রহ করে অন্য একটি ছবি চেষ্টা করুন।');
+    } finally {
+      setIsProcessingLogo(false);
+    }
   };
 
   const handleHandleChange = (val: string) => {
@@ -192,6 +232,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
     setEditHandle(clean);
     setHandleCollisionError(null);
+    setProfileEditError(null);
 
     const norm = normalizeHandle(clean);
     const formatCheck = validateHandleFormat(norm);
@@ -213,6 +254,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setHandleCollisionError(null);
+    setProfileEditError(null);
+
+    if (!editName.trim()) {
+      setProfileEditError('আপনার পূর্ণ নাম প্রদান করুন।');
+      return;
+    }
+    if (!editChannelName.trim()) {
+      setProfileEditError('চ্যানেলের নাম প্রদান করুন।');
+      return;
+    }
 
     const normHandle = normalizeHandle(editHandle);
     const formatCheck = validateHandleFormat(normHandle);
@@ -228,20 +279,53 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       return;
     }
 
-    const res = await updateProfile({
-      displayName: editName.trim(),
-      channelName: editChannelName.trim(),
-      handle: normHandle,
-      username: normHandle.replace(/^@/, ''),
-      bio: editBio.trim(),
-      websiteUrl: editWebsite.trim(),
-      avatarUrl: editAvatar.trim(),
-    });
+    setIsSavingProfile(true);
+    try {
+      const res = await updateProfile({
+        displayName: editName.trim(),
+        channelName: editChannelName.trim(),
+        email: editEmail.trim().toLowerCase(),
+        handle: normHandle,
+        username: normHandle.replace(/^@/, ''),
+        bio: editBio.trim(),
+        websiteUrl: formatWebsiteUrl(editWebsite),
+        avatarUrl: editAvatar.trim() || currentUser.avatarUrl,
+      });
 
-    if (res.success) {
-      setIsEditModalOpen(false);
-    } else {
-      setHandleCollisionError(res.message || 'প্রোফাইল আপডেট ব্যর্থ হয়েছে।');
+      if (res.success) {
+        setIsEditModalOpen(false);
+        setProfileToast(res.message || 'প্রোফাইল সফলভাবে আপডেট করা হয়েছে!');
+        setTimeout(() => setProfileToast(null), 4000);
+      } else {
+        if (res.message?.includes('হ্যান্ডেল')) {
+          setHandleCollisionError(res.message);
+        } else {
+          setProfileEditError(res.message || 'প্রোফাইল আপডেট ব্যর্থ হয়েছে।');
+        }
+      }
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassFeedback(null);
+    if (newPassInput !== confirmPassInput) {
+      setPassFeedback({ text: 'নতুন পাসওয়ার্ড ও নিশ্চিতকরণ পাসওয়ার্ড একই হতে হবে।', isError: true });
+      return;
+    }
+    setIsChangingPass(true);
+    try {
+      const res = await changePassword(currPassInput, newPassInput);
+      setPassFeedback({ text: res.message || '', isError: !res.success });
+      if (res.success) {
+        setCurrPassInput('');
+        setNewPassInput('');
+        setConfirmPassInput('');
+      }
+    } finally {
+      setIsChangingPass(false);
     }
   };
 
@@ -386,18 +470,37 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 w-full animate-in fade-in pb-16 font-['Hind_Siliguri']">
-      {/* 
-        NO COVER PHOTO / BANNER (Item 11 strictly: NO profile cover photo / banner) 
-        Clean header card with luxury cyberpunk accent
-      */}
-      <div className="relative rounded-3xl bg-zinc-950/80 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl mb-6">
+      {profileToast && (
+        <div
+          role="status"
+          data-testid="profile-save-toast"
+          className="mb-4 px-4 py-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs sm:text-sm font-semibold flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span>{profileToast}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setProfileToast(null)}
+            aria-label="Close notification"
+            className="text-zinc-400 hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Channel Profile Header Card */}
+      <div className="relative rounded-3xl bg-zinc-950/90 border border-zinc-800/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl mb-6">
         <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            {/* Avatar / Channel Logo with Download Button (Item 8) */}
-            <div className="relative group">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left min-w-0">
+            {/* Avatar / Channel Logo with Download Button */}
+            <div className="relative group shrink-0">
               <img
                 src={currentUser.avatarUrl}
-                alt={currentUser.displayName}
+                alt={currentUser.channelName || currentUser.displayName}
+                referrerPolicy="no-referrer"
                 className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl object-cover border-4 border-[#09090b] shadow-2xl ring-2 ring-cyan-500/40"
               />
               {currentUser.isVerified && (
@@ -406,11 +509,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </span>
               )}
 
-              {/* Profile Photo Download Button (Item 8: everyone can download, no fake screenshot claim) */}
               <button
                 type="button"
                 onClick={handleDownloadProfilePhoto}
                 title="প্রোফাইল ছবি ডাউনলোড করুন"
+                aria-label="প্রোফাইল ছবি ডাউনলোড করুন"
                 className="absolute inset-0 bg-black/60 rounded-3xl opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1 text-white text-[10px] font-bold"
               >
                 <Download className="w-5 h-5 text-cyan-400" />
@@ -418,31 +521,50 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </button>
             </div>
 
-            <div>
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-white font-['Plus_Jakarta_Sans'] tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-black text-white font-['Plus_Jakarta_Sans'] tracking-tight truncate">
                   {currentUser.channelName || currentUser.displayName}
                 </h1>
                 {currentUser.isVerified && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                    {t('verified')}
+                  <span className="text-xs font-semibold text-cyan-400">
+                    · {t('verified')}
                   </span>
                 )}
               </div>
 
-              <p className="text-xs text-zinc-400 mt-0.5">
-                <span>{currentUser.displayName}</span> • <span className="text-cyan-400">@{currentUser.username}</span> • <span className="text-zinc-500">{currentUser.email}</span>
-              </p>
+              <div className="text-xs text-zinc-400 mt-1 flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-0.5">
+                <span className="text-zinc-200 font-medium">{currentUser.displayName}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-cyan-400 font-mono font-semibold">{activeHandle}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-zinc-500 font-mono">{currentUser.email}</span>
+              </div>
 
               {currentUser.bio ? (
-                <p className="text-xs text-zinc-300 max-w-md mt-2 font-['Hind_Siliguri'] leading-relaxed">
+                <p className="text-xs sm:text-sm text-zinc-300 max-w-xl mt-2.5 font-['Hind_Siliguri'] leading-relaxed">
                   {currentUser.bio}
                 </p>
               ) : (
-                <p className="text-xs text-zinc-500 italic mt-1">কোনো বায়ো দেওয়া হয়নি।</p>
+                <p className="text-xs text-zinc-500 italic mt-2">কোনো বায়ো দেওয়া হয়নি।</p>
               )}
 
-              {/* Social Media Links display (Item 9) */}
+              {currentUser.websiteUrl && (
+                <div className="mt-2 flex items-center justify-center sm:justify-start">
+                  <a
+                    href={formatWebsiteUrl(currentUser.websiteUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 hover:underline transition font-mono"
+                  >
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate max-w-xs">{currentUser.websiteUrl}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                </div>
+              )}
+
+              {/* Social Media Links display */}
               <div className="flex flex-wrap items-center gap-2 mt-3 justify-center sm:justify-start">
                 {(currentUser.socialLinks || []).length > 0 ? (
                   currentUser.socialLinks?.map((soc) => (
@@ -463,8 +585,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 )}
 
                 <button
+                  type="button"
                   onClick={() => setIsSocialModalOpen(true)}
-                  className="px-2 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-[11px] text-cyan-400 font-bold border border-zinc-800 transition flex items-center gap-1"
+                  className="min-h-[34px] px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-[11px] text-cyan-400 font-bold border border-zinc-800 transition flex items-center gap-1 whitespace-nowrap"
                 >
                   <Plus className="w-3 h-3" />
                   <span>লিংক যোগ</span>
@@ -474,18 +597,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white transition shadow"
+              type="button"
+              onClick={openEditModal}
+              data-testid="edit-profile-btn"
+              className="min-h-[42px] flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-white transition shadow whitespace-nowrap"
             >
               <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
               <span>{t('editProfile')}</span>
             </button>
 
             <button
+              type="button"
               onClick={onOpenUpload}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 text-black font-black text-xs hover:brightness-110 transition shadow-lg shadow-cyan-500/25"
+              className="min-h-[42px] flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 text-black font-black text-xs hover:brightness-110 transition shadow-lg shadow-cyan-500/25 whitespace-nowrap"
             >
               <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>{t('upload')}</span>
@@ -493,48 +619,54 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Public Statistics Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-6 mt-6 border-t border-zinc-800/80">
-          <div className="p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-center">
-            <span className="block text-lg font-black text-white">{currentUser.followersCount.toLocaleString()}</span>
-            <span className="text-[11px] font-medium text-zinc-400">{t('followers')}</span>
+        {/* Clean Unboxed Public Statistics Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 pt-5 mt-6 border-t border-zinc-800/80">
+          <div className="py-2 sm:py-1 sm:px-3 text-center">
+            <span className="block text-xl font-black text-white tabular-nums">{currentUser.followersCount.toLocaleString()}</span>
+            <span className="text-xs font-medium text-zinc-400">{t('followers')}</span>
           </div>
-          <div className="p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-center">
-            <span className="block text-lg font-black text-white">{currentUser.followingCount.toLocaleString()}</span>
-            <span className="text-[11px] font-medium text-zinc-400">{t('followingCount')}</span>
+          <div className="py-2 sm:py-1 sm:px-3 text-center">
+            <span className="block text-xl font-black text-white tabular-nums">{currentUser.followingCount.toLocaleString()}</span>
+            <span className="text-xs font-medium text-zinc-400">{t('followingCount')}</span>
           </div>
-          <div className="p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-center">
-            <span className="block text-lg font-black text-cyan-400">{totalViews.toLocaleString()}</span>
-            <span className="text-[11px] font-medium text-zinc-400">{t('views')}</span>
+          <div className="py-2 sm:py-1 sm:px-3 text-center">
+            <span className="block text-xl font-black text-cyan-400 tabular-nums">{totalViews.toLocaleString()}</span>
+            <span className="text-xs font-medium text-zinc-400">{t('views')}</span>
           </div>
-          <div className="p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-center">
-            <span className="block text-lg font-black text-pink-500">{totalLikes.toLocaleString()}</span>
-            <span className="text-[11px] font-medium text-zinc-400">{t('likes')}</span>
+          <div className="py-2 sm:py-1 sm:px-3 text-center">
+            <span className="block text-xl font-black text-pink-500 tabular-nums">{totalLikes.toLocaleString()}</span>
+            <span className="text-xs font-medium text-zinc-400">{t('likes')}</span>
           </div>
-          <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-center">
-            <span className="block text-lg font-black text-white">{totalShares.toLocaleString()}</span>
-            <span className="text-[11px] font-medium text-zinc-400">{t('shares')}</span>
+          <div className="col-span-2 sm:col-span-1 py-2 sm:py-1 sm:px-3 text-center">
+            <span className="block text-xl font-black text-white tabular-nums">{totalShares.toLocaleString()}</span>
+            <span className="text-xs font-medium text-zinc-400">{t('shares')}</span>
           </div>
         </div>
       </div>
 
-      {/* Tabs Bar: Videos, Analytics, Device Management, Security, Verification */}
-      <div className="flex flex-wrap items-center gap-2 pb-4">
+      {/* Tabs Bar: Videos, Analytics, Monetization, Devices, Security, Verification */}
+      <div role="tablist" className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-4">
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'videos'}
           onClick={() => setActiveTab('videos')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'videos'
               ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
           }`}
         >
           <Film className="w-3.5 h-3.5" />
-          <span>প্রকাশিত ভিডিও ({myVideos.length})</span>
+          <span>প্রকাশিত ভিডিও</span>
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'analytics'}
           onClick={() => setActiveTab('analytics')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'analytics'
               ? 'bg-pink-500/20 text-pink-300 border-pink-500/50'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
@@ -544,10 +676,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <span>ক্রিয়েটর অ্যানালিটিক্স</span>
         </button>
 
-        {/* Creator Income & Monetization Tab (User Request 10) */}
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'monetization'}
           onClick={() => setActiveTab('monetization')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'monetization'
               ? 'bg-gradient-to-r from-cyan-500/25 to-pink-500/25 text-white border-pink-500/60 shadow-lg shadow-pink-500/15'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
@@ -555,34 +689,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         >
           <Wallet className="w-3.5 h-3.5 text-pink-400" />
           <span>আয় ও মনিটাইজেশন</span>
-          {creatorMonetizationStatus === 'monetized' ? (
-            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-              সক্রিয়
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
-              ৳
-            </span>
-          )}
         </button>
 
-        {/* Device Management Tab (Item 5) */}
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'devices'}
           onClick={() => setActiveTab('devices')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'devices'
               ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
           }`}
         >
           <Smartphone className="w-3.5 h-3.5" />
-          <span>ডিভাইস ও সেশন ({deviceSessions.length})</span>
+          <span>ডিভাইস ও সেশন</span>
         </button>
 
-        {/* Security & Password Tab (Item 3 & 7) */}
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'security'}
           onClick={() => setActiveTab('security')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'security'
               ? 'bg-pink-500/20 text-pink-300 border-pink-500/50'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
@@ -593,8 +722,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'verification'}
           onClick={() => setActiveTab('verification')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
+          className={`min-h-[42px] shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition border ${
             activeTab === 'verification'
               ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
@@ -626,11 +758,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   key={vid.id}
                   className="relative group rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 aspect-[9/16] shadow-lg flex flex-col justify-end p-3"
                 >
-                  <img
-                    src={vid.thumbnailUrl}
-                    alt={vid.title}
-                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
+                  {vid.thumbnailUrl ? (
+                    <img
+                      src={vid.thumbnailUrl}
+                      alt={vid.title}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : vid.videoUrl ? (
+                    <video
+                      src={vid.videoUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-950 to-slate-900" />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
                   <div className="absolute top-2.5 left-2.5 z-10">
@@ -655,11 +799,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       {vid.visibility === 'public' ? <Lock className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm(t('deleteVideoConfirm'))) {
-                          deleteVideo(vid.id);
-                        }
-                      }}
+                      onClick={() => deleteVideo(vid.id)}
                       className="p-1.5 rounded-lg bg-black/80 hover:bg-rose-900 text-rose-400"
                       title={t('deleteVideo')}
                     >
@@ -689,34 +829,68 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       )}
 
-      {/* Tab 2: Creator Analytics */}
+      {/* Tab 2: Real Zero-Fake-Data Creator Analytics */}
       {activeTab === 'analytics' && (
         <div className="mt-3 space-y-4">
-          <div className="p-5 rounded-3xl bg-zinc-900/60 border border-zinc-800">
-            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-1.5">
-              <BarChart3 className="w-4 h-4 text-cyan-400" />
-              <span>ভিডিও পারফরম্যান্স ওভারভিউ</span>
-            </h3>
-            <p className="text-xs text-zinc-400 mb-4">
-              গত ৩০ দিনে আপনার সামগ্রিক দর্শক ও এনগেজমেন্ট চিত্র।
-            </p>
+          <div className="p-6 rounded-3xl bg-zinc-950/80 border border-zinc-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-cyan-400" />
+                  <span>ভিডিও পারফরম্যান্স ওভারভিউ (বাস্তব পরিসংখ্যান)</span>
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  আপনার আপলোড করা ভিডিওর প্রকৃত ভিউ, লাইক, কমেন্ট এবং শেয়ার বিশ্লেষণ।
+                </p>
+              </div>
+              <div className="text-xs text-zinc-400 flex items-center gap-2 tabular-nums">
+                <span>শর্ট: <strong className="text-cyan-400">{creatorAnalytics.shortVideos}</strong></span>
+                <span aria-hidden="true">·</span>
+                <span>লং: <strong className="text-pink-400">{creatorAnalytics.longVideos}</strong></span>
+                <span aria-hidden="true">·</span>
+                <span>এনগেজমেন্ট: <strong className="text-emerald-400">{creatorAnalytics.engagementRatePercent}%</strong></span>
+              </div>
+            </div>
 
-            <div className="h-44 flex items-end gap-2 pt-6 pb-2 border-b border-zinc-800">
-              {[40, 65, 30, 85, 95, 70, 110, 130, 90, 140, 160, 190].map((val, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
-                  <div 
-                    className="w-full bg-gradient-to-t from-cyan-500/80 to-pink-500 rounded-t-lg transition duration-300 group-hover:brightness-125"
-                    style={{ height: `${(val / 200) * 100}%` }}
-                  />
-                  <span className="text-[9px] text-zinc-500">{i + 1}</span>
+            {creatorAnalytics.topVideos.length === 0 ? (
+              <div className="py-12 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
+                <BarChart3 className="w-9 h-9 text-zinc-600 mx-auto mb-2" />
+                <p className="text-xs text-zinc-400 mb-3">
+                  এখনো কোনো ভিডিও আপলোড না করায় কোনো অ্যানালিটিক্স নেই।
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenUpload}
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-cyan-400 text-black font-bold text-xs"
+                >
+                  প্রথম ভিডিও আপলোড করুন
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="h-44 flex items-end gap-3 pt-6 pb-2 border-b border-zinc-800">
+                  {creatorAnalytics.topVideos.map((vid) => (
+                    <div key={vid.id} className="flex-1 flex flex-col items-center gap-1.5 group min-w-0">
+                      <span className="text-[10px] font-mono text-zinc-400 tabular-nums">
+                        {vid.views.toLocaleString()}
+                      </span>
+                      <div
+                        className={`w-full max-w-[44px] rounded-t-lg transition duration-300 group-hover:brightness-125 ${
+                          vid.format === 'long'
+                            ? 'bg-gradient-to-t from-pink-500 to-rose-400'
+                            : 'bg-gradient-to-t from-cyan-500 to-sky-400'
+                        }`}
+                        style={{ height: `${vid.relativeScalePercent}%` }}
+                        title={`${vid.title}: ${vid.views} ভিউ, ${vid.likes} লাইক`}
+                      />
+                      <span className="text-[10px] text-zinc-400 truncate max-w-full">
+                        {vid.title}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-between items-center text-[10px] text-zinc-500 pt-2">
-              <span>Day 1</span>
-              <span>Day 15</span>
-              <span>Day 30</span>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -794,12 +968,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       if (eligibilityMetrics.isEligible) {
                         setIsApplyModalOpen(true);
                       } else {
-                        alert(`মনিটাইজেশনের জন্য কমপক্ষে ${(eligibilityMetrics.targetViews / 10000000).toFixed(0)} কোটি ভিউ, ${eligibilityMetrics.targetWatchHours.toLocaleString()} ঘণ্টা ওয়াচ টাইম এবং ${eligibilityMetrics.targetFollowers.toLocaleString()} ফলোয়ার প্রয়োজন। আপনার বর্তমান অগ্রগতি নিচে দেখুন।`);
+                        setMonetizationFeedback({
+                          text: `মনিটাইজেশনের জন্য কমপক্ষে ${eligibilityMetrics.targetViews.toLocaleString()} ভিউ, ${eligibilityMetrics.targetWatchHours.toLocaleString()} ঘণ্টা ওয়াচ টাইম এবং ${eligibilityMetrics.targetFollowers.toLocaleString()} ফলোয়ার প্রয়োজন।`,
+                          isError: true
+                        });
                       }
                     }}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-xs transition shadow-lg ${
+                    className={`min-h-[42px] flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-xs transition shadow-lg ${
                       eligibilityMetrics.isEligible
-                        ? 'bg-gradient-to-r from-cyan-400 to-sky-400 text-black hover:brightness-110 shadow-cyan-500/25 animate-pulse'
+                        ? 'bg-gradient-to-r from-cyan-400 to-sky-400 text-black hover:brightness-110 shadow-cyan-500/25'
                         : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
                     }`}
                   >
@@ -953,17 +1130,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
                   <Eye className="w-4 h-4 text-cyan-400" />
-                  <span>ভিডিও ভিউ আর্নিংস (৳১০ প্রতি ১,০০০ ভিউ)</span>
+                  <span>ভিডিও ভিউ আর্নিংস (৳{monetizationConfig.ratePer1000Views} প্রতি ১,০০০ ভিউ)</span>
                 </span>
                 <span className="text-xs font-mono font-bold text-cyan-400">
-                  ৳{((currentUser.validViewsCount || 0) * 0.01).toFixed(2)}
+                  ৳{calculateViewsIncome(currentUser.validViewsCount || 0, monetizationConfig.ratePer1000Views).toFixed(2)}
                 </span>
               </div>
               <div className="text-xs text-zinc-400">
                 মোট ভ্যালিড ভিউ: <strong className="text-white font-mono">{(currentUser.validViewsCount || 0).toLocaleString()}</strong>
               </div>
               <div className="p-3 rounded-2xl bg-zinc-950 text-[11px] text-zinc-400">
-                প্রতি ১টি ভিউ = ৳০.০১ পয়সা। অটোমেটিক হিসাব হয়ে প্রতিদিনের শেষে ব্যালেন্সে জমা হয়।
+                প্রতি ১,০০০ ভ্যালিড ভিউ = ৳{monetizationConfig.ratePer1000Views} টাকা। অটোমেটিক হিসাব হয়ে ব্যালেন্সে জমা হয়।
               </div>
             </div>
 
@@ -971,22 +1148,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-pink-400" />
-                  <span>ওয়াচ টাইম আর্নিংস (৳১ প্রতি ১ ঘণ্টা)</span>
+                  <span>ওয়াচ টাইম আর্নিংস (৳{monetizationConfig.ratePerWatchHour} প্রতি ১ ঘণ্টা)</span>
                 </span>
                 <span className="text-xs font-mono font-bold text-pink-400">
-                  ৳{(currentUser.validWatchTimeHours || 0).toFixed(2)}
+                  ৳{calculateWatchTimeIncome(currentUser.validWatchTimeHours || 0, monetizationConfig.ratePerWatchHour).toFixed(2)}
                 </span>
               </div>
               <div className="text-xs text-zinc-400">
                 মোট ভ্যালিড ওয়াচ টাইম: <strong className="text-white font-mono">{(currentUser.validWatchTimeHours || 0).toFixed(1)} ঘণ্টা</strong>
               </div>
               <div className="p-3 rounded-2xl bg-zinc-950 text-[11px] text-zinc-400">
-                প্রতি ১ ঘণ্টা রিয়েল প্লেব্যাক = ৳১.০০ টাকা। বট ও ফেক লুপ ওয়াচ টাইম বাতিল হয়ে যায়।
+                প্রতি ১ ঘণ্টা রিয়েল প্লেব্যাক = ৳{monetizationConfig.ratePerWatchHour} টাকা। বট ও ফেক লুপ ওয়াচ টাইম বাতিল হয়ে যায়।
               </div>
             </div>
           </div>
 
-          {/* 4. Visual Income Analytics Chart */}
+          {/* 4. Visual Income Analytics Chart (Real transactions only — zero fake numbers) */}
           <div className="p-6 rounded-3xl bg-zinc-950/80 border border-zinc-800">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -995,29 +1172,50 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <span>দৈনিক আয় অ্যানালিটিক্স চিত্র (Daily Earnings Trend)</span>
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  ভিউ ও ওয়াচ টাইম থেকে অর্জিত প্রতিদিনের স্বয়ংক্রিয় আয়ের চিত্র (৳)
+                  ভিউ ও ওয়াচ টাইম থেকে অর্জিত বাস্তব প্রতিদিনের আয়ের চিত্র (৳)
                 </p>
               </div>
-              <span className="text-xs text-zinc-400 font-mono">গত ১৪ দিন</span>
+              <span className="text-xs text-zinc-400 font-mono">বাস্তব লেনদেন</span>
             </div>
 
-            <div className="h-44 flex items-end gap-2 pt-6 pb-2 border-b border-zinc-800">
-              {[120, 240, 180, 420, 310, 520, 680, 490, 750, 620, 890, 780, 940, 1150].map((val, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
-                  <div 
-                    className="w-full bg-gradient-to-t from-pink-500 via-cyan-500 to-sky-400 rounded-t-lg transition duration-300 group-hover:brightness-125"
-                    style={{ height: `${(val / 1200) * 100}%` }}
-                    title={`Day ${i + 1}: ৳${val}`}
-                  />
-                  <span className="text-[9px] text-zinc-500 font-mono">{i + 1}</span>
+            {(() => {
+              const incomeTx = creatorTransactions.filter(
+                (tx) => tx.type === 'views_income' || tx.type === 'watch_time_income'
+              );
+              if (incomeTx.length === 0) {
+                return (
+                  <div className="py-10 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
+                    <p className="text-xs text-zinc-400">
+                      এখনো কোনো বাস্তব আয়ের লেনদেন যুক্ত হয়নি। ভিউ ও ওয়াচ টাইম থেকে আয় শুরু হলে এখানে গ্রাফ দেখা যাবে।
+                    </p>
+                  </div>
+                );
+              }
+              const byDay = new Map<string, number>();
+              incomeTx.forEach((tx) => {
+                const dayKey = new Date(tx.timestamp).toLocaleDateString('en-CA');
+                byDay.set(dayKey, (byDay.get(dayKey) || 0) + Math.max(0, tx.amount));
+              });
+              const entries = Array.from(byDay.entries()).slice(-14);
+              const maxDayVal = Math.max(1, ...entries.map(([, val]) => val));
+              return (
+                <div className="h-44 flex items-end gap-2 pt-6 pb-2 border-b border-zinc-800">
+                  {entries.map(([day, val]) => (
+                    <div key={day} className="flex-1 flex flex-col items-center gap-1.5 group">
+                      <span className="text-[10px] font-mono text-zinc-400 tabular-nums">
+                        ৳{val.toFixed(0)}
+                      </span>
+                      <div
+                        className="w-full max-w-[36px] bg-gradient-to-t from-pink-500 via-cyan-500 to-sky-400 rounded-t-lg transition duration-300 group-hover:brightness-125"
+                        style={{ height: `${Math.max(12, Math.round((val / maxDayVal) * 100))}%` }}
+                        title={`${day}: ৳${val.toFixed(2)}`}
+                      />
+                      <span className="text-[9px] text-zinc-500 font-mono">{day.slice(5)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-between items-center text-[10px] text-zinc-500 pt-2 font-mono">
-              <span>Day 1</span>
-              <span>Day 7</span>
-              <span>Day 14</span>
-            </div>
+              );
+            })()}
           </div>
 
           {/* 5. Per-Video Earnings Table */}
@@ -1046,8 +1244,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     {myVideos.map(vid => {
                       const vViews = vid.validViewsCount || vid.viewsCount || 0;
                       const vHours = vid.validWatchTimeHours || Number(((vViews * 45) / 3600).toFixed(2));
-                      const vEarn = (vViews * 0.01);
-                      const wEarn = (vHours * 1.0);
+                      const vEarn = calculateViewsIncome(vViews, monetizationConfig.ratePer1000Views);
+                      const wEarn = calculateWatchTimeIncome(vHours, monetizationConfig.ratePerWatchHour);
                       const totalEarn = vEarn + wEarn;
                       return (
                         <tr key={vid.id} className="hover:bg-zinc-900/40">
@@ -1077,13 +1275,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <span>বিকাশ উইথড্রয়াল সেটিংস (bKash Cashout Setup)</span>
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  শুধুমাত্র বিকাশ (bKash)-এর মাধ্যমে টাকা তুলতে পারবেন। সর্বনিম্ন উত্তোলন ৳১০,০০০ টাকা।
+                  শুধুমাত্র বিকাশ (bKash)-এর মাধ্যমে টাকা তুলতে পারবেন। সর্বনিম্ন উত্তোলন ৳{monetizationConfig.minWithdrawalAmount.toLocaleString()} টাকা।
                 </p>
               </div>
 
               <button
-                onClick={() => setIsWithdrawModalOpen(true)}
-                disabled={(currentUser.availableBalance || 0) < 10000}
+                onClick={() => {
+                  setWithdrawAmount(monetizationConfig.minWithdrawalAmount);
+                  setIsWithdrawModalOpen(true);
+                }}
+                disabled={(currentUser.availableBalance || 0) < monetizationConfig.minWithdrawalAmount}
                 className="px-5 py-2.5 rounded-xl bg-pink-500 hover:bg-pink-400 disabled:opacity-40 disabled:pointer-events-none text-black font-black text-xs transition shadow-lg shadow-pink-500/20"
               >
                 ক্যাশআউট রিকোয়েস্ট পাঠান
@@ -1294,12 +1495,87 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       )}
 
-      {/* Tab 4: Security Settings (Item 3 & 7) */}
+      {/* Tab 4: Security Settings */}
       {activeTab === 'security' && (
         <div className="mt-3 space-y-4">
+          {/* Change Password Section */}
+          <div className="p-5 rounded-3xl bg-zinc-900/60 border border-zinc-800">
+            <div className="mb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-pink-400" />
+                <span>পাসওয়ার্ড পরিবর্তন (Change Password)</span>
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                যেকোনো সময় আপনার অ্যাকাউন্টের পাসওয়ার্ড আপডেট করুন।
+              </p>
+            </div>
+
+            {passFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs font-medium mb-3 flex items-center gap-2 ${
+                  passFeedback.isError
+                    ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                    : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                }`}
+              >
+                {passFeedback.isError ? (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                )}
+                <span>{passFeedback.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePasswordSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">বর্তমান পাসওয়ার্ড *</label>
+                <input
+                  type="password"
+                  required
+                  value={currPassInput}
+                  onChange={(e) => setCurrPassInput(e.target.value)}
+                  placeholder="বর্তমান পাসওয়ার্ড"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">নতুন পাসওয়ার্ড *</label>
+                <input
+                  type="password"
+                  required
+                  value={newPassInput}
+                  onChange={(e) => setNewPassInput(e.target.value)}
+                  placeholder="কমপক্ষে ৬ অক্ষর"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">নতুন পাসওয়ার্ড নিশ্চিত করুন *</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassInput}
+                  onChange={(e) => setConfirmPassInput(e.target.value)}
+                  placeholder="পুনরায় লিখুন"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div className="sm:col-span-3 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isChangingPass}
+                  className="min-h-[40px] px-5 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-bold text-xs transition disabled:opacity-50"
+                >
+                  {isChangingPass ? 'আপডেট হচ্ছে...' : 'পাসওয়ার্ড আপডেট করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
+
           {/* Security Question Section */}
           <div className="p-5 rounded-3xl bg-zinc-900/60 border border-zinc-800">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-3">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <KeyRound className="w-4 h-4 text-cyan-400" />
@@ -1311,13 +1587,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setIsSecurityQModalOpen(true);
                   setNewQuestionText(currentUser.securityQuestion || 'আপনার প্রথম স্কুলের নাম কী?');
                   setQError(null);
                   setQSuccess(null);
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-black border border-cyan-500/20 text-xs font-bold transition"
+                className="min-h-[40px] shrink-0 px-3.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-black border border-cyan-500/20 text-xs font-bold transition whitespace-nowrap"
               >
                 প্রশ্ন পরিবর্তন করুন
               </button>
@@ -1333,7 +1610,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Permanent Account Deletion Section (Item 6 & 7: Strictly NO temporary deactivation; only permanent deletion with password) */}
+          {/* Permanent Account Deletion Section */}
           <div className="p-5 rounded-3xl bg-rose-950/20 border border-rose-500/30">
             <h3 className="text-sm font-bold text-rose-400 flex items-center gap-1.5 mb-1">
               <Trash2 className="w-4 h-4" />
@@ -1344,12 +1621,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </p>
 
             <button
+              type="button"
               onClick={() => {
                 setIsDeleteModalOpen(true);
                 setDeletePass('');
                 setDeleteError(null);
               }}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+              className="min-h-[42px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>পাসওয়ার্ড যাচাই করে অ্যাকাউন্ট স্থায়ীভাবে মুছুন</span>
@@ -1421,56 +1699,79 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       {/* Edit Profile Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto">
-          <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 overflow-y-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="প্রোফাইল সম্পাদনা"
+            className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl animate-in zoom-in-95 my-auto max-h-[92vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-bold text-white">
-                প্রোফাইল সম্পাদনা
-              </h3>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-zinc-400 hover:text-white">
+              <div>
+                <h3 className="text-base font-bold text-white">প্রোফাইল সম্পাদনা</h3>
+                <p className="text-[11px] text-zinc-400">
+                  যেকোনো সময় নাম, চ্যানেলের নাম, হ্যান্ডেল, লোগো ও অন্যান্য তথ্য পরিবর্তন করুন।
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                aria-label="বন্ধ করুন"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {profileEditError && (
+              <div className="mb-4 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{profileEditError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSaveProfile} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">পূর্ণ নাম</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    পূর্ণ নাম *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="আপনার পূর্ণ নাম"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">চ্যানেলের নাম</label>
-                <input
-                  type="text"
-                  value={editChannelName}
-                  onChange={(e) => setEditChannelName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
-                />
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    চ্যানেলের নাম *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editChannelName}
+                    onChange={(e) => setEditChannelName(e.target.value)}
+                    placeholder="আপনার চ্যানেলের নাম"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
               </div>
+              <p className="text-[11px] text-zinc-500 -mt-2">
+                নাম ও চ্যানেলের নাম অন্য ক্রিয়েটরদের সাথে মিলতে পারে; শুধুমাত্র হ্যান্ডেল (@handle) সম্পূর্ণ অনন্য।
+              </p>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">বায়ো (Bio)</label>
-                <textarea
-                  rows={2}
-                  value={editBio}
-                  onChange={(e) => setEditBio(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500 resize-none"
-                />
-              </div>
-
-              {/* Unique Handle Field (Item 8) */}
+              {/* Unique Handle Field */}
               <div>
                 <label className="block text-xs font-bold text-zinc-300 mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <AtSign className="w-3.5 h-3.5 text-cyan-400" />
                     <span>ইউনিক চ্যানেল হ্যান্ডেল (Unique @handle) *</span>
                   </span>
-                  <span className="text-[10px] text-zinc-500 font-mono">গ্লোবালি অনন্য</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">কপি করা যাবে না</span>
                 </label>
                 <div className="relative">
                   <input
@@ -1479,14 +1780,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     value={editHandle}
                     onChange={(e) => handleHandleChange(e.target.value)}
                     placeholder="@your_unique_handle"
-                    className={`w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border text-xs text-white focus:outline-none transition font-mono ${
-                      handleCollisionError 
-                        ? 'border-rose-500/80 focus:border-rose-400' 
+                    className={`w-full px-3.5 py-2.5 pr-20 rounded-xl bg-zinc-950 border text-xs text-white focus:outline-none transition font-mono ${
+                      handleCollisionError
+                        ? 'border-rose-500/80 focus:border-rose-400'
                         : 'border-zinc-800 focus:border-cyan-400'
                     }`}
                   />
-                  {!handleCollisionError && editHandle.length >= 3 && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-400 flex items-center gap-1 text-[11px] font-bold">
+                  {!handleCollisionError && editHandle.length >= 4 && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1 text-[11px] font-bold">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                       <span>উপলব্ধ</span>
                     </span>
@@ -1503,7 +1804,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 {handleSuggestions.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="text-[10px] text-zinc-400">প্রস্তাবিত হ্যান্ডেল:</span>
-                    {handleSuggestions.map(sug => (
+                    {handleSuggestions.map((sug) => (
                       <button
                         key={sug}
                         type="button"
@@ -1517,30 +1818,61 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 )}
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    জিমেইল / ইমেইল *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="name@gmail.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    ওয়েবসাইট লিংক
+                  </label>
+                  <input
+                    type="text"
+                    value={editWebsite}
+                    onChange={(e) => setEditWebsite(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">ওয়েবসাইট লিংক</label>
-                <input
-                  type="url"
-                  value={editWebsite}
-                  onChange={(e) => setEditWebsite(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">বায়ো (Bio)</label>
+                <textarea
+                  rows={2}
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  placeholder="আপনার চ্যানেল ও কন্টেন্ট সম্পর্কে লিখুন..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-cyan-500 resize-none"
                 />
               </div>
 
-              {/* Direct Channel Logo Upload (Item 8: No URL link needed) */}
+              {/* Direct Channel Logo Upload */}
               <div>
                 <label className="block text-xs font-bold text-zinc-300 mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Camera className="w-3.5 h-3.5 text-pink-400" />
-                    <span>চ্যানেল লোগো / প্রোফাইল ছবি আপলোড *</span>
+                    <span>চ্যানেল লোগো / প্রোফাইল ছবি আপলোড</span>
                   </span>
-                  <span className="text-[10px] text-zinc-500">ফাইল আপলোড (PNG/JPG/WEBP)</span>
+                  <span className="text-[10px] text-zinc-500">PNG / JPG / WEBP</span>
                 </label>
 
                 <div className="flex items-center gap-4 p-3 rounded-2xl bg-zinc-950 border border-zinc-800">
                   <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-cyan-400/50 shadow-md shrink-0 bg-zinc-900 flex items-center justify-center">
-                    {editAvatar ? (
+                    {isProcessingLogo ? (
+                      <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+                    ) : editAvatar ? (
                       <img src={editAvatar} alt="Logo Preview" className="w-full h-full object-cover" />
                     ) : (
                       <Camera className="w-6 h-6 text-zinc-600" />
@@ -1548,18 +1880,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   </div>
 
                   <div className="flex-1">
-                    <label className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold cursor-pointer transition border border-zinc-700 shadow-sm">
+                    <label className="min-h-[40px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold cursor-pointer transition border border-zinc-700 shadow-sm">
                       <Upload className="w-3.5 h-3.5 text-cyan-400" />
                       <span>ডিভাইস থেকে নতুন লোগো নির্বাচন করুন</span>
                       <input
                         type="file"
-                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        accept="image/png,image/jpeg,image/webp,image/jpg,image/svg+xml"
                         onChange={handleLogoUpload}
                         className="hidden"
                       />
                     </label>
                     <p className="text-[10px] text-zinc-500 mt-1">
-                      কোনো লিংক দেওয়ার প্রয়োজন নেই, সরাসরি ফাইল সিলেক্ট করুন।
+                      কোনো লিংক দেওয়ার প্রয়োজন নেই, সরাসরি ছবি আপলোড করলেই সংরক্ষিত হবে।
                     </p>
                   </div>
                 </div>
@@ -1572,19 +1904,21 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-3 py-1.5 rounded-xl bg-zinc-800 text-xs text-zinc-300"
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 font-semibold transition"
                 >
                   বাতিল
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-cyan-400 text-black font-bold text-xs shadow-md"
+                  disabled={isSavingProfile || isProcessingLogo || Boolean(handleCollisionError)}
+                  className="min-h-[40px] px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-sky-400 text-black font-black text-xs shadow-md hover:brightness-110 disabled:opacity-50 transition flex items-center gap-1.5"
                 >
-                  সংরক্ষণ করুন
+                  {isSavingProfile && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSavingProfile ? 'সংরক্ষণ হচ্ছে...' : 'পরিবর্তন সংরক্ষণ করুন'}</span>
                 </button>
               </div>
             </form>
@@ -1875,8 +2209,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
               <form onSubmit={async (e) => {
                 e.preventDefault();
+                setApplyError(null);
                 if (!originalCertified) {
-                  alert('অরিজিনাল কন্টেন্টের শর্তে সম্মতি প্রদান করতে হবে।');
+                  setApplyError('অরিজিনাল কন্টেন্টের শর্তে সম্মতি প্রদান করতে হবে।');
                   return;
                 }
                 setIsApplying(true);
@@ -1905,15 +2240,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-cyan-500/5 border border-cyan-500/20 cursor-pointer">
                   <input
                     type="checkbox"
-                    required
                     checked={originalCertified}
-                    onChange={(e) => setOriginalCertified(e.target.checked)}
+                    onChange={(e) => { setOriginalCertified(e.target.checked); setApplyError(null); }}
                     className="mt-0.5 accent-cyan-400 w-4 h-4 rounded"
                   />
                   <span className="text-xs text-zinc-300 leading-snug">
                     আমি প্রত্যয়ন করছি যে আমার চ্যানেলে আপলোডকৃত সমস্ত ভিডিও সম্পূর্ণ নিজস্ব, মৌলিক ও অরিজিনাল কন্টেন্ট। অন্যের কপি করা ভিডিও পাওয়া গেলে যেকোনো সময় মনিটাইজেশন বাতিল ও অ্যাকাউন্ট স্থগিত করা হতে পারে।
                   </span>
                 </label>
+
+                {applyError && (
+                  <p className="text-xs text-rose-400 font-medium">{applyError}</p>
+                )}
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
                   <button
@@ -1960,18 +2298,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">সর্বনিম্ন ক্যাশআউট:</span>
-                <span className="text-pink-400 font-mono">৳১০,০০০</span>
+                <span className="text-pink-400 font-mono">৳{monetizationConfig.minWithdrawalAmount.toLocaleString()}</span>
               </div>
             </div>
 
             <form onSubmit={async (e) => {
               e.preventDefault();
-              if (withdrawAmount < 10000) {
-                alert('সর্বনিম্ন উত্তোলনের পরিমাণ ৳১০,০০০ টাকা।');
+              if (withdrawAmount < monetizationConfig.minWithdrawalAmount) {
+                setMonetizationFeedback({
+                  text: `সর্বনিম্ন উত্তোলনের পরিমাণ ৳${monetizationConfig.minWithdrawalAmount.toLocaleString()} টাকা।`,
+                  isError: true
+                });
                 return;
               }
               if (withdrawAmount > (currentUser.availableBalance || 0)) {
-                alert('পর্যাপ্ত ব্যালেন্স নেই।');
+                setMonetizationFeedback({
+                  text: 'পর্যাপ্ত ব্যালেন্স নেই।',
+                  isError: true
+                });
                 return;
               }
               setIsWithdrawing(true);
@@ -1982,12 +2326,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             }} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-300 mb-1">
-                  টাকার পরিমাণ (৳) — সর্বনিম্ন ১০,০০০
+                  টাকার পরিমাণ (৳) — সর্বনিম্ন {monetizationConfig.minWithdrawalAmount.toLocaleString()}
                 </label>
                 <input
                   type="number"
                   required
-                  min={10000}
+                  min={monetizationConfig.minWithdrawalAmount}
                   max={currentUser.availableBalance || 0}
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(Number(e.target.value))}
@@ -2034,7 +2378,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isWithdrawing || (currentUser.availableBalance || 0) < 10000}
+                  disabled={isWithdrawing || (currentUser.availableBalance || 0) < monetizationConfig.minWithdrawalAmount}
                   className="px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-400 text-black font-black text-xs transition shadow-lg shadow-pink-500/25 disabled:opacity-40"
                 >
                   {isWithdrawing ? 'অনুরোধ পাঠানো হচ্ছে...' : 'রিকোয়েস্ট নিশ্চিত করুন'}

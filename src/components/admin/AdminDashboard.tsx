@@ -135,12 +135,10 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleResetMonetizationConfig = async () => {
-    if (window.confirm('আপনি কি ডিফল্ট মনিটাইজেশন মান (১০ কোটি ভিউ, ১০,০০০ ঘণ্টা, ১০,০০০ ফলোয়ার, ১০ টাকা/১০০০ ভিউ, ১ টাকা/ঘণ্টা, ১০,০০০ টাকা ক্যাশআউট) পুনরুদ্ধার করতে চান?')) {
-      const res = await resetMonetizationConfig();
-      if (res.success) {
-        setConfigSaveStatus({ text: 'ডিফল্ট মান সফলভাবে পুনরুদ্ধার করা হয়েছে!' });
-        setTimeout(() => setConfigSaveStatus(null), 3500);
-      }
+    const res = await resetMonetizationConfig();
+    if (res.success) {
+      setConfigSaveStatus({ text: 'ডিফল্ট মান সফলভাবে পুনরুদ্ধার করা হয়েছে!' });
+      setTimeout(() => setConfigSaveStatus(null), 3500);
     }
   };
 
@@ -465,9 +463,22 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Buttons: Change Password & Lock Admin */}
-        <div className="flex items-center gap-2.5">
+        {/* Action Buttons: Monetization & Money Settings, Change Password & Lock Admin */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
+            type="button"
+            onClick={() => {
+              setActiveTab('monetization');
+              setMonetizationSubTab('settings');
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-black rounded-xl bg-gradient-to-r from-cyan-400 to-pink-500 text-black hover:brightness-110 transition shadow-lg shadow-cyan-500/20"
+          >
+            <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>টাকার পরিমাণ ও মনিটাইজেশন শর্ত</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowChangePassModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 transition"
           >
@@ -476,6 +487,7 @@ export const AdminDashboard: React.FC = () => {
           </button>
 
           <button
+            type="button"
             onClick={lockAdmin}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition shadow"
           >
@@ -654,7 +666,7 @@ export const AdminDashboard: React.FC = () => {
                   <FileCheck className="w-10 h-10 text-zinc-600 mx-auto mb-2" />
                   <h4 className="text-sm font-bold text-white mb-1">কোনো মনিটাইজেশন আবেদন নেই</h4>
                   <p className="text-xs text-zinc-400">
-                    যোগ্য ক্রিয়েটররা (১০ কোটি ভিউ, ১০,০০০ ঘণ্টা, ১০,০০০ ফলোয়ার) আবেদন করলে এখানে পর্যালোচনা করতে পারবেন।
+                    যোগ্য ক্রিয়েটররা ({monetizationConfig.minViews.toLocaleString()} ভিউ, {monetizationConfig.minWatchHours.toLocaleString()} ঘণ্টা, {monetizationConfig.minFollowers.toLocaleString()} ফলোয়ার) আবেদন করলে এখানে পর্যালোচনা করতে পারবেন।
                   </p>
                 </div>
               ) : (
@@ -673,9 +685,9 @@ export const AdminDashboard: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
-                        <span>ভিডিও ভিউ: <strong className="text-white font-mono">{(app.validViews || 0).toLocaleString()}</strong> / ১০ কোটি</span>
-                        <span>ওয়াচ টাইম: <strong className="text-white font-mono">{(app.validWatchTimeHours || 0).toLocaleString()}</strong> / ১০,০০০ ঘণ্টা</span>
-                        <span>ফলোয়ার: <strong className="text-white font-mono">{(app.followersCount || 0).toLocaleString()}</strong> / ১০,০০০</span>
+                        <span>ভিডিও ভিউ: <strong className="text-white font-mono">{(app.validViews || 0).toLocaleString()}</strong> / {monetizationConfig.minViews.toLocaleString()}</span>
+                        <span>ওয়াচ টাইম: <strong className="text-white font-mono">{(app.validWatchTimeHours || 0).toLocaleString()}</strong> / {monetizationConfig.minWatchHours.toLocaleString()} ঘণ্টা</span>
+                        <span>ফলোয়ার: <strong className="text-white font-mono">{(app.followersCount || 0).toLocaleString()}</strong> / {monetizationConfig.minFollowers.toLocaleString()}</span>
                         <span className="text-emerald-400">✓ অরিজিনাল কন্টেন্ট প্রত্যায়িত</span>
                       </div>
 
@@ -724,7 +736,7 @@ export const AdminDashboard: React.FC = () => {
                   <Wallet className="w-10 h-10 text-zinc-600 mx-auto mb-2" />
                   <h4 className="text-sm font-bold text-white mb-1">কোনো ক্যাশআউট রিকোয়েস্ট নেই</h4>
                   <p className="text-xs text-zinc-400">
-                    ক্রিয়েটররা ন্যূনতম ৳১০,০০০ তোলার আবেদন করলে এখানে তালিকাভুক্ত হবে।
+                    ক্রিয়েটররা ন্যূনতম ৳{monetizationConfig.minWithdrawalAmount.toLocaleString()} তোলার আবেদন করলে এখানে তালিকাভুক্ত হবে।
                   </p>
                 </div>
               ) : (
@@ -928,12 +940,13 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-min-views" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         ন্যূনতম ভ্যালিড ভিডিও ভিউ (Valid Views)
                       </label>
                       <input
+                        id="admin-min-views"
                         type="number"
-                        min="1"
+                        min="0"
                         required
                         value={configMinViews}
                         onChange={(e) => setConfigMinViews(Number(e.target.value))}
@@ -945,12 +958,13 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-min-watch-hours" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         ন্যূনতম ভ্যালিড ওয়াচ টাইম (ঘণ্টা)
                       </label>
                       <input
+                        id="admin-min-watch-hours"
                         type="number"
-                        min="1"
+                        min="0"
                         required
                         value={configMinWatchHours}
                         onChange={(e) => setConfigMinWatchHours(Number(e.target.value))}
@@ -962,12 +976,13 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-min-followers" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         ন্যূনতম চ্যানেল ফলোয়ার (Followers)
                       </label>
                       <input
+                        id="admin-min-followers"
                         type="number"
-                        min="1"
+                        min="0"
                         required
                         value={configMinFollowers}
                         onChange={(e) => setConfigMinFollowers(Number(e.target.value))}
@@ -989,10 +1004,11 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-rate-views" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         প্রতি ১,০০০ ভ্যালিড ভিউয়ের আয় (৳ BDT)
                       </label>
                       <input
+                        id="admin-rate-views"
                         type="number"
                         step="0.1"
                         min="0"
@@ -1007,10 +1023,11 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-rate-hours" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         প্রতি ১ ঘণ্টা ওয়াচ টাইমের আয় (৳ BDT)
                       </label>
                       <input
+                        id="admin-rate-hours"
                         type="number"
                         step="0.1"
                         min="0"
@@ -1025,19 +1042,20 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                      <label htmlFor="admin-min-withdrawal" className="block text-xs font-semibold text-zinc-300 mb-1.5">
                         সর্বনিম্ন বিকাশ ক্যাশআউট উত্তোলন সীমা (৳ BDT)
                       </label>
                       <input
+                        id="admin-min-withdrawal"
                         type="number"
-                        min="100"
+                        min="1"
                         required
                         value={configMinWithdrawal}
                         onChange={(e) => setConfigMinWithdrawal(Number(e.target.value))}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white font-mono focus:border-pink-500 focus:outline-none transition"
                       />
                       <span className="text-[10px] text-zinc-500 mt-1 block">
-                        ডিফল্ট: ৳১০,০০০ টাকা। ক্রিয়েটরগণ ব্যালেন্স এই সীমার কম থাকলে ক্যাশআউট করতে পারবেন না।
+                        ডিফল্ট: ৳১০,০০০ টাকা। যেকোনো সময় পরিবর্তন করা যাবে।
                       </span>
                     </div>
                   </div>
@@ -1177,24 +1195,24 @@ export const AdminDashboard: React.FC = () => {
           <div className="p-5 rounded-3xl bg-zinc-900/80 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-zinc-300 mb-1">
-                সর্বোচ্চ ভিডিও দৈর্ঘ্য (সেকেন্ডে) — পলিসি অনুযায়ী সর্বোচ্চ ১০ মিনিট (৬০০ সেকেন্ড)
+                সর্বোচ্চ ভিডিও দৈর্ঘ্য (সেকেন্ডে) — শর্ট ও লং ভিডিও সহ সর্বোচ্চ ৬০ মিনিট (৩৬০০ সেকেন্ড)
               </label>
               <input
                 type="number"
                 value={maxDuration}
-                max={600}
+                max={3600}
                 onChange={(e) => setMaxDuration(Number(e.target.value))}
                 className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white"
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-zinc-300 mb-1">
-                সর্বোচ্চ ভিডিও সাইজ (MB) — সর্বোচ্চ ৫০০ MB
+                সর্বোচ্চ ভিডিও সাইজ (MB) — সর্বোচ্চ ১০২৪ MB
               </label>
               <input
                 type="number"
                 value={maxUploadSize}
-                max={500}
+                max={1024}
                 onChange={(e) => setMaxUploadSize(Number(e.target.value))}
                 className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white"
               />

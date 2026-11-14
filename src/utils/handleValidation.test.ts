@@ -87,3 +87,36 @@ test('generateHandleSuggestions provides unique alternatives', () => {
   assert.ok(suggestions.every(s => s.startsWith('@')));
   assert.ok(suggestions.every(s => s !== '@bashar'));
 });
+
+test('identical displayName and channelName are allowed as long as @handle is unique', () => {
+  const existingUsers: UserProfile[] = [
+    {
+      id: 'u1',
+      email: 'a@gmail.com',
+      username: 'tanvir_one',
+      handle: '@tanvir_one',
+      displayName: 'তানভীর আহমেদ',
+      channelName: 'বাংলা ক্রিয়েটর স্টুডিও',
+      bio: '',
+      avatarUrl: '',
+      websiteUrl: '',
+      role: 'creator',
+      isVerified: false,
+      isKidsAccount: false,
+      followersCount: 0,
+      followingCount: 0,
+      totalViews: 0,
+      totalLikes: 0,
+      totalShares: 0,
+      isSuspended: false,
+      createdAt: '',
+    }
+  ];
+
+  // Different user using exact same displayName & channelName with a unique @handle -> allowed!
+  assert.equal(checkHandleCollision('@tanvir_two', existingUsers), false);
+  // Trying to copy @tanvir_one -> strictly blocked!
+  assert.equal(checkHandleCollision('@tanvir_one', existingUsers), true);
+  assert.equal(checkHandleCollision('@TANVIR_ONE', existingUsers), true);
+});
+

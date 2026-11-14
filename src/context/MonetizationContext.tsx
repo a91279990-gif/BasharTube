@@ -22,7 +22,7 @@ import {
   MonetizationConfig,
   DEFAULT_MONETIZATION_CONFIG
 } from '../utils/monetizationEngine';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
 interface MonetizationContextType {
@@ -141,6 +141,33 @@ export const MonetizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     localStorage.setItem('bashartube_monetization_config', JSON.stringify(monetizationConfig));
   }, [monetizationConfig]);
 
+  // Real-time sync of Admin Monetization & Money Config from Firestore
+  useEffect(() => {
+    try {
+      const unsub = onSnapshot(
+        doc(db, 'platform_settings', 'monetization'),
+        (snap) => {
+          if (snap.exists()) {
+            const remote = snap.data() as Partial<MonetizationConfig>;
+            setMonetizationConfig((prev) => {
+              const merged = { ...DEFAULT_MONETIZATION_CONFIG, ...prev, ...remote };
+              try {
+                localStorage.setItem('bashartube_monetization_config', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        },
+        () => {
+          // Safely retain localStorage configuration if Firestore is unreachable or denied
+        }
+      );
+      return () => unsub();
+    } catch {
+      return undefined;
+    }
+  }, []);
+
   // Current creator's monetization status
   const creatorMonetizationStatus: MonetizationStatus = 
     currentUser?.monetizationStatus || 'not_eligible';
@@ -178,15 +205,15 @@ export const MonetizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const currentHours = currentUser.validWatchTimeHours || 0;
     const currentFollowers = currentUser.followersCount || 0;
 
-    // Check minimum threshold
+    // Check dynamic minimum thresholds configured in Admin Panel
     if (
-      currentViews < MONETIZATION_MIN_VIEWS || 
-      currentHours < MONETIZATION_MIN_WATCH_HOURS || 
-      currentFollowers < MONETIZATION_MIN_FOLLOWERS
+      currentViews < monetizationConfig.minViews ||
+      currentHours < monetizationConfig.minWatchHours ||
+      currentFollowers < monetizationConfig.minFollowers
     ) {
-      return { 
-        success: false, 
-        message: 'মনিটাইজেশনের শর্তাবলী এখনো অপূর্ণ রয়েছে (১০ কোটি ভিউজ, ১০,০০০ ঘণ্টা ওয়াচ টাইম ও ১০,০০০ ফলোয়ার আবশ্যক)।' 
+      return {
+        success: false,
+        message: `মনিটাইজেশনের শর্তাবলী এখনো অপূর্ণ রয়েছে (${monetizationConfig.minViews.toLocaleString()} ভিউ, ${monetizationConfig.minWatchHours.toLocaleString()} ঘণ্টা ওয়াচ টাইম ও ${monetizationConfig.minFollowers.toLocaleString()} ফলোয়ার আবশ্যক)।`
       };
     }
 
@@ -691,7 +718,7 @@ export const MonetizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setMonetizationConfig(updated);
     try {
       localStorage.setItem('bashartube_monetization_config', JSON.stringify(updated));
-      await setDoc(doc(db, 'platform', 'monetization'), updated, { merge: true });
+      await setDoc(doc(db, 'platform_settings', 'monetization'), updated, { merge: true });
     } catch {}
 
     return { 
@@ -705,7 +732,7 @@ export const MonetizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setMonetizationConfig(DEFAULT_MONETIZATION_CONFIG);
     try {
       localStorage.setItem('bashartube_monetization_config', JSON.stringify(DEFAULT_MONETIZATION_CONFIG));
-      await setDoc(doc(db, 'platform', 'monetization'), DEFAULT_MONETIZATION_CONFIG, { merge: true });
+      await setDoc(doc(db, 'platform_settings', 'monetization'), DEFAULT_MONETIZATION_CONFIG, { merge: true });
     } catch {}
     return { success: true, message: 'ডিফল্ট মান সফলভাবে পুনরুদ্ধার করা হয়েছে।' };
   };

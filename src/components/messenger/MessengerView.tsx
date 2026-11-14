@@ -28,6 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMessenger } from '../../context/MessengerContext';
 import { useCall } from '../../context/CallContext';
 import { MessageItem, MessageType, UserProfile } from '../../types';
+import { generateDefaultAvatarDataUrl } from '../../utils/profileSync';
 
 const WALLPAPER_PRESETS = [
   'linear-gradient(135deg, #09090b 0%, #171720 100%)',
@@ -101,7 +102,7 @@ export const MessengerView: React.FC = () => {
     id: otherId || 'user_unknown',
     displayName: 'Chat Member',
     username: 'member',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
+    avatarUrl: generateDefaultAvatarDataUrl('Chat Member', otherId || 'member'),
     isVerified: false,
     role: 'user'
   } as UserProfile);
@@ -246,7 +247,7 @@ export const MessengerView: React.FC = () => {
               const other = chat.otherUser || (chat.userAId === currentUser?.id ? registeredAccounts.find(u => u.id === chat.userBId) : registeredAccounts.find(u => u.id === chat.userAId)) || {
                 displayName: 'Member',
                 username: 'member',
-                avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
+                avatarUrl: generateDefaultAvatarDataUrl('Member', chat.id),
                 isVerified: false
               };
               const isSelected = chat.id === activeChatId;

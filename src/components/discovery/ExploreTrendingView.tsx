@@ -11,9 +11,10 @@ import {
   Play
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { useVideo } from '../../context/VideoContext';
 import { DEFAULT_PLATFORM_SETTINGS } from '../../data/mockData';
-import { VideoItem, UserProfile } from '../../types';
+import { formatVideoDuration, resolveVideoFormat } from '../../utils/videoFormat';
 
 interface ExploreTrendingViewProps {
   onSelectVideo: (videoId: string) => void;
@@ -36,6 +37,7 @@ export const ExploreTrendingView: React.FC<ExploreTrendingViewProps> = ({
   onOpenUpload
 }) => {
   const { t, language } = useLanguage();
+  const { registeredCreators } = useAuth();
   const { videos } = useVideo();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -150,52 +152,45 @@ export const ExploreTrendingView: React.FC<ExploreTrendingViewProps> = ({
         ))}
       </div>
 
-      {/* Creator Discovery Section */}
-      {(() => {
-        const registeredUsers: UserProfile[] = (() => {
-          try {
-            const saved = localStorage.getItem('bashartube_registered_accounts');
-            return saved ? JSON.parse(saved) : [];
-          } catch {
-            return [];
-          }
-        })();
-
-        if (registeredUsers.length === 0) return null;
-
-        return (
-          <div className="mb-8">
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5 font-['Plus_Jakarta_Sans']">
-              <Users className="w-4 h-4 text-pink-400" />
-              <span>{language === 'bn' ? 'নতুন ক্রিয়েটর ও চ্যানেলসমূহ' : 'Featured Creators & Channels'}</span>
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {registeredUsers.slice(0, 4).map((usr) => (
-                <div
-                  key={usr.id}
-                  className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center text-center hover:border-cyan-500/40 transition group"
-                >
-                  <img
-                    src={usr.avatarUrl}
-                    alt={usr.displayName}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/50 mb-2 group-hover:scale-105 transition"
-                  />
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                      {usr.channelName || usr.displayName}
-                    </span>
-                    {usr.isVerified && <CheckCircle className="w-3 h-3 text-cyan-400 fill-cyan-400" />}
-                  </div>
-                  <span className="text-[10px] text-zinc-500">@{usr.username}</span>
-                  <span className="text-[10px] font-semibold text-cyan-400 mt-1">
-                    {usr.followersCount} followers
+      {/* Creator Discovery Section (Live merged directory) */}
+      {registeredCreators.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5 font-['Plus_Jakarta_Sans']">
+            <Users className="w-4 h-4 text-pink-400" />
+            <span>{language === 'bn' ? 'ক্রিয়েটর ও চ্যানেলসমূহ' : 'Creators & Channels'}</span>
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {registeredCreators.slice(0, 8).map((usr) => (
+              <div
+                key={usr.id}
+                className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col items-center text-center hover:border-cyan-500/40 transition group"
+              >
+                <img
+                  src={usr.avatarUrl}
+                  alt={usr.displayName}
+                  referrerPolicy="no-referrer"
+                  className="w-14 h-14 rounded-full object-cover border-2 border-cyan-400/50 mb-2.5 group-hover:scale-105 transition"
+                />
+                <div className="flex items-center gap-1 max-w-full">
+                  <span className="text-xs font-bold text-white truncate max-w-[130px]">
+                    {usr.channelName || usr.displayName}
                   </span>
+                  {usr.isVerified && <CheckCircle className="w-3 h-3 text-cyan-400 fill-cyan-400 shrink-0" />}
                 </div>
-              ))}
-            </div>
+                <span className="text-[11px] text-zinc-400 truncate max-w-[140px]">
+                  {usr.displayName}
+                </span>
+                <span className="text-[11px] text-cyan-400/90 font-mono mt-0.5 truncate max-w-[140px]">
+                  {usr.handle || `@${usr.username}`}
+                </span>
+                <span className="text-[10px] font-medium text-zinc-500 mt-1 tabular-nums">
+                  {usr.followersCount.toLocaleString()} {language === 'bn' ? 'ফলোয়ার' : 'followers'}
+                </span>
+              </div>
+            ))}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* Video Grid */}
       <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5">
@@ -231,12 +226,46 @@ export const ExploreTrendingView: React.FC<ExploreTrendingViewProps> = ({
               onClick={() => onSelectVideo(vid.id)}
               className="relative group rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 aspect-[9/16] shadow-lg flex flex-col justify-end p-3 cursor-pointer"
             >
-              <img
-                src={vid.thumbnailUrl}
-                alt={vid.title}
-                className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
-              />
+              {vid.thumbnailUrl ? (
+                <img
+                  src={vid.thumbnailUrl}
+                  alt={vid.title}
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+              ) : vid.videoUrl ? (
+                <video
+                  src={vid.videoUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-950 to-slate-900" />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+
+              {/* Format & Duration Badge */}
+              <div className="absolute top-2.5 left-2.5 right-2.5 z-10 flex items-center justify-between">
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    resolveVideoFormat(vid) === 'long'
+                      ? 'bg-pink-500/90 text-white'
+                      : 'bg-cyan-500/90 text-black'
+                  }`}
+                >
+                  {resolveVideoFormat(vid) === 'long'
+                    ? language === 'bn'
+                      ? 'লং'
+                      : 'LONG'
+                    : language === 'bn'
+                    ? 'শর্ট'
+                    : 'SHORT'}
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/75 text-zinc-200">
+                  {formatVideoDuration(vid.duration)}
+                </span>
+              </div>
 
               {/* Play icon overlay on hover */}
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-10">

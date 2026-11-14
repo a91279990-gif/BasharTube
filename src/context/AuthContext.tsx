@@ -1,32 +1,41 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
   signOut as fbSignOut,
-  User as FirebaseUser 
+  User as FirebaseUser,
 } from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  setDoc,
+  deleteDoc,
+  where,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
-import { 
-  UserProfile, 
-  UserPreferences, 
-  SocialMediaLink, 
+import {
+  UserProfile,
+  UserPreferences,
+  SocialMediaLink,
   UserSession,
-  NotificationCategorySettings 
+  NotificationCategorySettings,
 } from '../types';
 import { SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD } from '../data/mockData';
-import { 
-  normalizeHandle, 
-  validateHandleFormat, 
-  checkHandleCollision, 
-  generateHandleSuggestions 
+import {
+  normalizeHandle,
+  validateHandleFormat,
+  checkHandleCollision,
+  generateHandleSuggestions,
 } from '../utils/handleValidation';
+import {
+  formatWebsiteUrl,
+  generateDefaultAvatarDataUrl,
+  mergeUserDirectories,
+} from '../utils/profileSync';
 
 export interface RegisterData {
   fullName: string;
@@ -46,48 +55,64 @@ interface AuthContextType {
   preferences: UserPreferences;
   isSuperAdmin: boolean;
   isAdmin: boolean;
-  
+  registeredCreators: UserProfile[];
+
   // Custom Registration with Name, Logo, Channel Name, Gmail, Password, Security Q&A
   registerAccount: (data: RegisterData) => Promise<{ success: boolean; message?: string }>;
-  
+
   // Custom Login with Gmail and Password
-  loginWithCredentials: (email: string, pass: string) => Promise<{ success: boolean; message?: string }>;
-  
-  // Security Question & Answer Recovery System (Item 2)
-  getSecurityQuestionByEmail: (email: string) => { question?: string; error?: string };
-  resetPasswordWithSecurityQuestion: (
-    email: string, 
-    answer: string, 
-    newPass: string
-  ) => { success: boolean; message?: string };
-  
-  // Security Question Change with current password validation (Item 3)
-  changeSecurityQuestion: (
-    currentPass: string, 
-    newQuestion: string, 
-    newAnswer: string
+  loginWithCredentials: (
+    email: string,
+    pass: string
   ) => Promise<{ success: boolean; message?: string }>;
 
-  // Device & Session Management (Item 4 & 5)
+  // Security Question & Answer Recovery System
+  getSecurityQuestionByEmail: (email: string) => { question?: string; error?: string };
+  resetPasswordWithSecurityQuestion: (
+    email: string,
+    answer: string,
+    newPass: string
+  ) => { success: boolean; message?: string };
+
+  // Security Question Change & Password Change
+  changeSecurityQuestion: (
+    currentPass: string,
+    newQuestion: string,
+    newAnswer: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  changePassword: (
+    currentPass: string,
+    newPass: string
+  ) => Promise<{ success: boolean; message?: string }>;
+
+  // Device & Session Management
   deviceSessions: UserSession[];
   logoutSession: (sessionId: string) => void;
   fetchActiveSessions: () => Promise<UserSession[]>;
-  invalidateSessionWithToken: (sessionId: string) => Promise<{ success: boolean; message?: string }>;
+  invalidateSessionWithToken: (
+    sessionId: string
+  ) => Promise<{ success: boolean; message?: string }>;
 
-  // Permanent Account Deletion with password confirmation (Item 6 & 7)
+  // Permanent Account Deletion with password confirmation
   deleteAccountWithPassword: (password: string) => Promise<{ success: boolean; message?: string }>;
 
-  // Social Media Links (Item 9)
+  // Social Media Links
   updateSocialLinks: (links: SocialMediaLink[]) => Promise<void>;
 
-  // Advanced Notification Settings (Item 12)
-  updateNotificationCategory: (category: keyof NotificationCategorySettings, enabled: boolean) => void;
+  // Advanced Notification Settings
+  updateNotificationCategory: (
+    category: keyof NotificationCategorySettings,
+    enabled: boolean
+  ) => void;
 
-  // Messenger Seen Status Toggle (Item 13)
+  // Messenger Seen Status Toggle
   toggleSeenStatus: (enabled: boolean) => void;
 
-  // Handle Availability & Uniqueness Check (Enforces unique @handle)
-  checkHandleAvailability: (handle: string, excludeUserId?: string) => { available: boolean; message?: string; suggestions?: string[] };
+  // Handle Availability & Uniqueness Check (Enforces unique @handle globally)
+  checkHandleAvailability: (
+    handle: string,
+    excludeUserId?: string
+  ) => { available: boolean; message?: string; suggestions?: string[] };
 
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -95,14 +120,20 @@ interface AuthContextType {
   updatePreferences: (updates: Partial<UserPreferences>) => void;
   toggleBlockUser: (targetUserId: string) => void;
   toggleDontRecommendCreator: (creatorId: string) => void;
-  
+
   // Admin Password Security Gate
   adminPassword: string;
   isAdminUnlocked: boolean;
   unlockAdminWithPassword: (pass: string) => { success: boolean; message?: string };
   lockAdmin: () => void;
-  updateAdminPassword: (oldPass: string, newPass: string) => { success: boolean; message?: string };
+  updateAdminPassword: (
+    oldPass: string,
+    newPass: string
+  ) => { success: boolean; message?: string };
 }
+
+const ACCOUNTS_STORAGE_KEY = 'bashartube_registered_accounts';
+const ACTIVE_USER_STORAGE_KEY = 'bashartube_active_user';
 
 const DEFAULT_NOTIFICATIONS: NotificationCategorySettings = {
   likes: true,
@@ -110,27 +141,51 @@ const DEFAULT_NOTIFICATIONS: NotificationCategorySettings = {
   follows: true,
   messages: true,
   calls: true,
-  videoUploads: true
+  videoUploads: true,
 };
 
 const DEFAULT_PREFS: UserPreferences = {
   dataSaver: false,
   soundEnabled: true,
   typingIndicatorEnabled: true,
-  seenStatusEnabled: true, // Item 13: Seen status default ON
+  seenStatusEnabled: true,
   chatWallpaper: 'linear-gradient(to bottom, #09090b, #121215)',
   blockedUserIds: [],
   dontRecommendCreatorIds: [],
-  notificationCategories: DEFAULT_NOTIFICATIONS // Item 12
+  notificationCategories: DEFAULT_NOTIFICATIONS,
 };
+
+function readLocalAccounts(): UserProfile[] {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalAccounts(accounts: UserProfile[]) {
+  try {
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  } catch {}
+}
+
+function sanitizeUserForFirestore(user: UserProfile): Record<string, unknown> {
+  const clean: Record<string, unknown> = { ...user, password: '' };
+  Object.keys(clean).forEach((k) => {
+    if (clean[k] === undefined) delete clean[k];
+  });
+  return clean;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Start with NO demo account!
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
-      const saved = localStorage.getItem('bashartube_active_user');
+      const saved = localStorage.getItem(ACTIVE_USER_STORAGE_KEY);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -139,11 +194,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [fbUser, setFbUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const firestoreUsersRef = useRef<UserProfile[]>([]);
+  const [registeredCreators, setRegisteredCreators] = useState<UserProfile[]>(() =>
+    readLocalAccounts()
+  );
 
-  // Security Answer Recovery Rate Limiting Protection (Item 2)
-  const [failedAttempts, setFailedAttempts] = useState<Record<string, { count: number; lockUntil?: number }>>({});
+  // Security Answer Recovery Rate Limiting Protection
+  const [failedAttempts, setFailedAttempts] = useState<
+    Record<string, { count: number; lockUntil?: number }>
+  >({});
 
-  // Strong Admin Master Password
+  // Admin Master Password
   const [adminPassword, setAdminPassword] = useState<string>(() => {
     try {
       const savedPass = localStorage.getItem('bashartube_admin_master_password');
@@ -172,8 +233,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...parsed,
           notificationCategories: {
             ...DEFAULT_NOTIFICATIONS,
-            ...(parsed.notificationCategories || {})
-          }
+            ...(parsed.notificationCategories || {}),
+          },
         };
       }
       return DEFAULT_PREFS;
@@ -182,48 +243,105 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || isAdminUnlocked;
+  const getMergedUsers = (): UserProfile[] => {
+    return mergeUserDirectories(firestoreUsersRef.current, readLocalAccounts());
+  };
+
+  const refreshMergedDirectory = () => {
+    const merged = getMergedUsers();
+    setRegisteredCreators(merged);
+    return merged;
+  };
+
+  const isSuperAdmin =
+    currentUser?.role === 'superadmin' ||
+    currentUser?.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
+    isAdminUnlocked;
   const isAdmin = isSuperAdmin || currentUser?.role === 'admin' || isAdminUnlocked;
 
-  // Build current browser/device session
+  // Build current real browser/device session
   const getClientSession = (): UserSession => {
     const userAgent = navigator.userAgent;
-    let browser = 'Chrome';
+    let browser = 'Web Browser';
     if (userAgent.includes('Firefox')) browser = 'Firefox';
-    else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) browser = 'Safari';
-    else if (userAgent.includes('Edge')) browser = 'Edge';
+    else if (userAgent.includes('Edg')) browser = 'Edge';
+    else if (userAgent.includes('Chrome')) browser = 'Chrome';
+    else if (userAgent.includes('Safari')) browser = 'Safari';
 
-    let os = 'Windows';
-    if (/Android/i.test(userAgent)) os = 'Android Mobile';
-    else if (/iPhone|iPad/i.test(userAgent)) os = 'iOS Device';
-    else if (/Mac/i.test(userAgent)) os = 'macOS';
-    else if (/Linux/i.test(userAgent)) os = 'Linux';
+    let os = 'Desktop';
+    let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
+    if (/Android/i.test(userAgent)) {
+      os = 'Android';
+      deviceType = 'mobile';
+    } else if (/iPhone|iPad/i.test(userAgent)) {
+      os = 'iOS';
+      deviceType = /iPad/i.test(userAgent) ? 'tablet' : 'mobile';
+    } else if (/Mac/i.test(userAgent)) {
+      os = 'macOS';
+    } else if (/Windows/i.test(userAgent)) {
+      os = 'Windows';
+    } else if (/Linux/i.test(userAgent)) {
+      os = 'Linux';
+    }
 
     return {
       id: 'session_' + Date.now(),
       deviceName: `${os} (${browser})`,
+      deviceType,
       browser,
       os,
-      ip: '103.205.71.12 (Dhaka, BD)',
+      ip: 'Current Web Session',
       lastActive: new Date().toISOString(),
-      isCurrent: true
+      loginAt: new Date().toISOString(),
+      isCurrent: true,
     };
   };
 
-  // Device Sessions list
-  const deviceSessions: UserSession[] = currentUser?.sessions && currentUser.sessions.length > 0
-    ? currentUser.sessions
-    : [
-        {
-          id: 'session_current',
-          deviceName: 'Primary Device (Active)',
-          browser: 'Web Client',
-          os: 'Desktop / Mobile',
-          ip: '103.205.71.12 (Dhaka, BD)',
-          lastActive: new Date().toISOString(),
-          isCurrent: true
+  const deviceSessions: UserSession[] =
+    currentUser?.sessions && currentUser.sessions.length > 0
+      ? currentUser.sessions
+      : [getClientSession()];
+
+  // Real-time Firestore /users directory listener for global @handle uniqueness & creator discovery
+  useEffect(() => {
+    try {
+      const unsubscribe = onSnapshot(
+        collection(db, 'users'),
+        (snapshot) => {
+          const remote: UserProfile[] = [];
+          snapshot.forEach((docSnap) => {
+            remote.push({ id: docSnap.id, ...(docSnap.data() as Omit<UserProfile, 'id'>) });
+          });
+          firestoreUsersRef.current = remote;
+          const merged = refreshMergedDirectory();
+
+          setCurrentUser((prev) => {
+            if (!prev) return prev;
+            const remoteMatch = merged.find((u) => u.id === prev.id);
+            if (!remoteMatch) return prev;
+            const remoteUpdated = new Date(
+              remoteMatch.updatedAt || remoteMatch.createdAt || 0
+            ).getTime();
+            const localUpdated = new Date(prev.updatedAt || prev.createdAt || 0).getTime();
+            if (remoteUpdated > localUpdated) {
+              const synced = { ...prev, ...remoteMatch, password: prev.password || remoteMatch.password };
+              try {
+                localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(synced));
+              } catch {}
+              return synced;
+            }
+            return prev;
+          });
+        },
+        (error) => {
+          console.warn('Firestore users directory notice:', error.message);
         }
-      ];
+      );
+      return () => unsubscribe();
+    } catch {
+      return undefined;
+    }
+  }, []);
 
   // Listen to Firebase Auth state
   useEffect(() => {
@@ -236,19 +354,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (userSnap.exists()) {
             const data = userSnap.data() as UserProfile;
             setCurrentUser(data);
-            localStorage.setItem('bashartube_active_user', JSON.stringify(data));
+            localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(data));
           } else {
-            const isOwnerAdmin = (firebaseUser.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+            const isOwnerAdmin =
+              (firebaseUser.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+            const rawName = (firebaseUser.displayName || 'user')
+              .toLowerCase()
+              .replace(/[^a-z0-9_]/g, '_')
+              .replace(/_+/g, '_')
+              .replace(/^[._]+|[._]+$/g, '');
+            const baseUser = (rawName.length >= 3 ? rawName : 'creator') + '_' + Math.floor(100 + Math.random() * 900);
+            const handle = `@${baseUser}`;
             const newProfile: UserProfile = {
               id: firebaseUser.uid,
               email: firebaseUser.email || '',
-              username: (firebaseUser.displayName || 'user').toLowerCase().replace(/\s+/g, '_') + '_' + Math.floor(Math.random() * 1000),
-              displayName: firebaseUser.displayName || 'User',
+              username: baseUser,
+              handle,
+              displayName: firebaseUser.displayName || 'Creator',
               channelName: firebaseUser.displayName || 'My Channel',
-              bio: 'New creator on BasharTube 🇧🇩',
-              avatarUrl: firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
+              bio: 'বাশারটিউব অফিসিয়াল ক্রিয়েটর 🇧🇩',
+              avatarUrl:
+                firebaseUser.photoURL ||
+                generateDefaultAvatarDataUrl(firebaseUser.displayName || 'C', baseUser),
               websiteUrl: '',
-              role: isOwnerAdmin ? 'superadmin' : 'user',
+              role: isOwnerAdmin ? 'superadmin' : 'creator',
               isVerified: isOwnerAdmin,
               isKidsAccount: false,
               followersCount: 0,
@@ -261,14 +390,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               securityQuestion: 'আপনার প্রিয় শহর কোনটি?',
               securityAnswer: 'dhaka',
               socialLinks: [],
-              sessions: [getClientSession()]
+              sessions: [getClientSession()],
             };
-            await setDoc(userDocRef, newProfile);
+            await setDoc(userDocRef, sanitizeUserForFirestore(newProfile));
             setCurrentUser(newProfile);
-            localStorage.setItem('bashartube_active_user', JSON.stringify(newProfile));
+            localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(newProfile));
           }
         } catch (err) {
-          console.error("Firestore user fetch notice", err);
+          console.error('Firestore user fetch notice', err);
         }
       }
       setIsLoading(false);
@@ -277,37 +406,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  // Check Handle Availability and Uniqueness
-  const checkHandleAvailability = (handle: string, excludeUserId?: string): { available: boolean; message?: string; suggestions?: string[] } => {
+  // Global Handle Availability and Uniqueness Check (Firestore + Local merged directory)
+  const checkHandleAvailability = (
+    handle: string,
+    excludeUserId?: string
+  ): { available: boolean; message?: string; suggestions?: string[] } => {
     const formatted = normalizeHandle(handle);
     const formatCheck = validateHandleFormat(formatted);
     if (!formatCheck.isValid) {
       return { available: false, message: formatCheck.error };
     }
 
-    try {
-      const existingAccountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = existingAccountsRaw ? JSON.parse(existingAccountsRaw) : [];
-      const taken = checkHandleCollision(formatted, accounts, excludeUserId);
-      if (taken) {
-        const suggestions = generateHandleSuggestions(formatted, accounts);
-        return {
-          available: false,
-          message: `এই হ্যান্ডেলটি (${formatted}) ইতিমধ্যে ব্যবহৃত হচ্ছে। কপি করা যাবে না।`,
-          suggestions
-        };
-      }
+    const mergedAccounts = getMergedUsers();
+    const taken = checkHandleCollision(formatted, mergedAccounts, excludeUserId);
+    if (taken) {
+      const suggestions = generateHandleSuggestions(formatted, mergedAccounts);
       return {
-        available: true,
-        message: `${formatted} উপলব্ধ রয়েছে এবং এটি সম্পূর্ণ অনন্য!`
+        available: false,
+        message: `এই হ্যান্ডেলটি (${formatted}) ইতিমধ্যে অন্য কেউ ব্যবহার করছেন। একই হ্যান্ডেল কপি করা যাবে না।`,
+        suggestions,
       };
+    }
+
+    return {
+      available: true,
+      message: `${formatted} উপলব্ধ রয়েছে এবং এটি সম্পূর্ণ অনন্য!`,
+    };
+  };
+
+  // Authoritative Firestore query to ensure a handle is not copied across browsers/devices
+  const verifyRemoteHandleUnique = async (
+    formattedHandle: string,
+    excludeUserId?: string
+  ): Promise<boolean> => {
+    const identifier = formattedHandle.slice(1);
+    try {
+      const [byUsernameSnap, byHandleSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('username', '==', identifier))),
+        getDocs(query(collection(db, 'users'), where('handle', '==', formattedHandle))),
+      ]);
+
+      let taken = false;
+      byUsernameSnap.forEach((d) => {
+        if (!excludeUserId || d.id !== excludeUserId) taken = true;
+      });
+      byHandleSnap.forEach((d) => {
+        if (!excludeUserId || d.id !== excludeUserId) taken = true;
+      });
+      return !taken;
     } catch {
-      return { available: true };
+      return true;
     }
   };
 
-  // Register with: নাম (fullName), ইউনিক হ্যান্ডেল (handle starting with @), লোগো (channelLogo), চ্যানেলের নাম (channelName), জিমেইল (email), পাসওয়ার্ড (password), সিকিউরিটি প্রশ্ন ও উত্তর
-  const registerAccount = async (data: RegisterData): Promise<{ success: boolean; message?: string }> => {
+  // Register account: Names (fullName / channelName) can be copied; @handle MUST be globally unique
+  const registerAccount = async (
+    data: RegisterData
+  ): Promise<{ success: boolean; message?: string }> => {
     const cleanEmail = data.email.trim().toLowerCase();
     const cleanPassword = data.password.trim();
     const cleanFullName = data.fullName.trim();
@@ -318,40 +473,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!cleanFullName) return { success: false, message: 'আপনার পূর্ণ নাম প্রদান করুন।' };
     if (!cleanChannelName) return { success: false, message: 'চ্যানেলের নাম প্রদান করুন।' };
 
-    // Validate Handle starting with @
-    const formattedHandle = normalizeHandle(data.handle || cleanChannelName);
+    const formattedHandle = normalizeHandle(data.handle);
     const handleCheck = validateHandleFormat(formattedHandle);
     if (!handleCheck.isValid) {
-      return { success: false, message: handleCheck.error || 'হ্যান্ডেলের প্রথমে অবশ্যই @ থাকতে হবে।' };
+      return {
+        success: false,
+        message: handleCheck.error || 'হ্যান্ডেলের প্রথমে অবশ্যই @ থাকতে হবে।',
+      };
     }
 
-    if (!cleanEmail || !cleanEmail.includes('@')) return { success: false, message: 'একটি সঠিক জিমেইল অ্যাড্রেস প্রদান করুন।' };
-    if (cleanPassword.length < 6) return { success: false, message: 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।' };
-    if (!cleanQuestion) return { success: false, message: 'নিরাপত্তা প্রশ্ন (Security Question) নির্ধারণ করুন।' };
-    if (!cleanAnswer) return { success: false, message: 'নিরাপত্তা প্রশ্নের উত্তর প্রদান করুন।' };
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, message: 'একটি সঠিক জিমেইল অ্যাড্রেস প্রদান করুন।' };
+    }
+    if (cleanPassword.length < 6) {
+      return { success: false, message: 'পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।' };
+    }
+    if (!cleanQuestion) {
+      return { success: false, message: 'নিরাপত্তা প্রশ্ন (Security Question) নির্ধারণ করুন।' };
+    }
+    if (!cleanAnswer) {
+      return { success: false, message: 'নিরাপত্তা প্রশ্নের উত্তর প্রদান করুন।' };
+    }
 
     try {
-      const existingAccountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = existingAccountsRaw ? JSON.parse(existingAccountsRaw) : [];
-
-      const duplicateEmail = accounts.find(a => a.email.toLowerCase() === cleanEmail);
+      const mergedAccounts = getMergedUsers();
+      const duplicateEmail = mergedAccounts.find((a) => a.email.toLowerCase() === cleanEmail);
       if (duplicateEmail) {
-        return { success: false, message: 'এই জিমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট তৈরি করা হয়েছে।' };
+        return {
+          success: false,
+          message: 'এই জিমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট তৈরি করা হয়েছে।',
+        };
       }
 
-      // Check handle collision (cannot copy or duplicate existing handle)
-      const handleTaken = checkHandleCollision(formattedHandle, accounts);
-      if (handleTaken) {
-        return { 
-          success: false, 
-          message: `এই হ্যান্ডেলটি (${formattedHandle}) ইতিমধ্যে অন্য একজন ক্রিয়েটর নিয়েছেন। হ্যান্ডেল কপি বা নকল করা নিষিদ্ধ। অন্য একটি ইউনিক হ্যান্ডেল দিন।` 
+      // Enforce global @handle uniqueness (local merged + remote authoritative check)
+      if (checkHandleCollision(formattedHandle, mergedAccounts)) {
+        return {
+          success: false,
+          message: `এই হ্যান্ডেলটি (${formattedHandle}) ইতিমধ্যে অন্য একজন ক্রিয়েটর নিয়েছেন। একই হ্যান্ডেল কপি করা যাবে না।`,
+        };
+      }
+
+      const isRemotelyAvailable = await verifyRemoteHandleUnique(formattedHandle);
+      if (!isRemotelyAvailable) {
+        return {
+          success: false,
+          message: `এই হ্যান্ডেলটি (${formattedHandle}) ইতিমধ্যে অন্য একজন ক্রিয়েটর নিয়েছেন। একই হ্যান্ডেল কপি করা যাবে না।`,
         };
       }
 
       const username = formattedHandle.slice(1);
       const isOwnerAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
-
-      const newSession = getClientSession();
+      const nowIso = new Date().toISOString();
 
       const newProfile: UserProfile = {
         id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -361,8 +533,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handle: formattedHandle,
         displayName: cleanFullName,
         channelName: cleanChannelName,
-        avatarUrl: data.channelLogo || `https://api.dicebear.com/7.x/identicon/svg?seed=${username}`,
-        bio: `${cleanChannelName} - বাশারটিউব অফিসিয়াল চ্যানেল 🇧🇩`,
+        avatarUrl:
+          data.channelLogo ||
+          generateDefaultAvatarDataUrl(cleanChannelName || cleanFullName, username),
+        bio: `${cleanChannelName} - বাশারটিউব অফিসিয়াল চ্যানেল 🇧🇩`,
         websiteUrl: '',
         role: isOwnerAdmin ? 'superadmin' : 'creator',
         isVerified: isOwnerAdmin,
@@ -373,88 +547,116 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalViews: 0,
         totalShares: 0,
         isSuspended: false,
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
         securityQuestion: cleanQuestion,
         securityAnswer: cleanAnswer,
         socialLinks: [],
-        sessions: [newSession]
+        sessions: [getClientSession()],
       };
 
-      accounts.push(newProfile);
-      localStorage.setItem('bashartube_registered_accounts', JSON.stringify(accounts));
+      const localAccounts = readLocalAccounts();
+      localAccounts.push(newProfile);
+      writeLocalAccounts(localAccounts);
+
+      firestoreUsersRef.current = [
+        ...firestoreUsersRef.current.filter((u) => u.id !== newProfile.id),
+        newProfile,
+      ];
+      refreshMergedDirectory();
+
       setCurrentUser(newProfile);
-      localStorage.setItem('bashartube_active_user', JSON.stringify(newProfile));
+      localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(newProfile));
 
       try {
-        await setDoc(doc(db, 'users', newProfile.id), {
-          ...newProfile,
-          password: ''
-        });
+        await setDoc(doc(db, 'users', newProfile.id), sanitizeUserForFirestore(newProfile));
       } catch (err) {
-        console.warn("Firestore user sync notice:", err);
+        console.warn('Firestore user sync notice:', err);
       }
 
       return { success: true };
     } catch (e: any) {
-      return { success: false, message: e.message || 'অ্যাকাউন্ট তৈরি করতে সমস্যা হয়েছে।' };
+      return { success: false, message: e.message || 'অ্যাকাউন্ট তৈরি করতে সমস্যা হয়েছে।' };
     }
   };
 
-  // Login with জিমেইল (Gmail) ও পাসওয়ার্ড (Password) (Item 1: NO 2FA)
-  const loginWithCredentials = async (email: string, pass: string): Promise<{ success: boolean; message?: string }> => {
+  // Login with Gmail & Password
+  const loginWithCredentials = async (
+    email: string,
+    pass: string
+  ): Promise<{ success: boolean; message?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = pass.trim();
 
     if (!cleanEmail || !cleanPassword) {
-      return { success: false, message: 'জিমেইল এবং পাসওয়ার্ড উভয়ই আবশ্যক।' };
+      return { success: false, message: 'জিমেইল এবং পাসওয়ার্ড উভয়ই আবশ্যক।' };
     }
 
     try {
-      // 1. Check Super Admin Master Account
+      const mergedAccounts = getMergedUsers();
+
+      // 1. Check Super Admin Master Account (preserving any saved profile edits!)
       if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
         if (cleanPassword === adminPassword || cleanPassword === SUPER_ADMIN_PASSWORD) {
+          const savedAdmin = mergedAccounts.find(
+            (a) => a.id === 'user_superadmin' || a.email.toLowerCase() === cleanEmail
+          );
           const superAdminProfile: UserProfile = {
-            id: 'user_superadmin',
-            email: SUPER_ADMIN_EMAIL,
-            username: 'abdul_bashar',
-            displayName: 'Abdul Bashar',
-            channelName: 'BasharTube Official',
-            bio: 'Founder & Super Admin of BasharTube 🇧🇩',
-            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces',
-            websiteUrl: 'https://bashartube.bd',
+            id: savedAdmin?.id || 'user_superadmin',
+            email: savedAdmin?.email || SUPER_ADMIN_EMAIL,
+            username: savedAdmin?.username || 'abdul_bashar',
+            handle: savedAdmin?.handle || '@abdul_bashar',
+            displayName: savedAdmin?.displayName || 'Abdul Bashar',
+            channelName: savedAdmin?.channelName || 'BasharTube Official',
+            bio: savedAdmin?.bio || 'Founder & Super Admin of BasharTube 🇧🇩',
+            avatarUrl:
+              savedAdmin?.avatarUrl ||
+              generateDefaultAvatarDataUrl('Abdul Bashar', 'abdul_bashar'),
+            websiteUrl: savedAdmin?.websiteUrl || 'https://bashartube.bd',
             role: 'superadmin',
             isVerified: true,
             isKidsAccount: false,
-            followersCount: 0,
-            followingCount: 0,
-            totalLikes: 0,
-            totalViews: 0,
-            totalShares: 0,
+            followersCount: savedAdmin?.followersCount || 0,
+            followingCount: savedAdmin?.followingCount || 0,
+            totalLikes: savedAdmin?.totalLikes || 0,
+            totalViews: savedAdmin?.totalViews || 0,
+            totalShares: savedAdmin?.totalShares || 0,
             isSuspended: false,
-            createdAt: '2026-01-01T00:00:00Z',
-            securityQuestion: 'আপনার প্রিয় সোশ্যাল প্ল্যাটফর্ম কোনটি?',
-            securityAnswer: 'bashartube',
-            socialLinks: [
-              { id: '1', platform: 'facebook', url: 'https://facebook.com/bashartube' },
-              { id: '2', platform: 'youtube', url: 'https://youtube.com/@bashartube' }
-            ],
-            sessions: [getClientSession()]
+            createdAt: savedAdmin?.createdAt || '2026-01-01T00:00:00Z',
+            updatedAt: savedAdmin?.updatedAt,
+            securityQuestion:
+              savedAdmin?.securityQuestion || 'আপনার প্রিয় সোশ্যাল প্ল্যাটফর্ম কোনটি?',
+            securityAnswer: savedAdmin?.securityAnswer || 'bashartube',
+            socialLinks: savedAdmin?.socialLinks || [],
+            sessions: [getClientSession()],
           };
           setCurrentUser(superAdminProfile);
-          localStorage.setItem('bashartube_active_user', JSON.stringify(superAdminProfile));
+          localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(superAdminProfile));
           setIsAdminUnlocked(true);
           sessionStorage.setItem('bashartube_admin_unlocked', 'true');
           return { success: true };
         }
       }
 
-      // 2. Check registered accounts
-      const existingAccountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = existingAccountsRaw ? JSON.parse(existingAccountsRaw) : [];
-
-      const found = accounts.find(a => a.email.toLowerCase() === cleanEmail);
+      // 2. Check registered accounts (local + Firestore directory)
+      let found = mergedAccounts.find((a) => a.email.toLowerCase() === cleanEmail);
       if (!found) {
-        return { success: false, message: 'এই জিমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নতুন অ্যাকাউন্ট খুলুন।' };
+        try {
+          const snap = await getDocs(
+            query(collection(db, 'users'), where('email', '==', cleanEmail))
+          );
+          snap.forEach((d) => {
+            found = { id: d.id, ...(d.data() as Omit<UserProfile, 'id'>) };
+          });
+        } catch {}
+      }
+
+      if (!found) {
+        return {
+          success: false,
+          message:
+            'এই জিমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নতুন অ্যাকাউন্ট খুলুন।',
+        };
       }
 
       if (found.password && found.password !== cleanPassword) {
@@ -462,30 +664,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (found.isSuspended) {
-        return { success: false, message: 'আপনার অ্যাকাউন্টটি সাময়িকভাবে স্থগিত (Suspended) রয়েছে।' };
+        return {
+          success: false,
+          message: 'আপনার অ্যাকাউন্টটি সাময়িকভাবে স্থগিত (Suspended) রয়েছে।',
+        };
       }
 
-      // Add current session (Item 4: Device session registered without sending annoying notifications)
       const currentSession = getClientSession();
       const updatedSessions = [
         currentSession,
-        ...(found.sessions || []).filter(s => s.deviceName !== currentSession.deviceName)
+        ...(found.sessions || []).filter((s) => s.deviceName !== currentSession.deviceName),
       ].slice(0, 5);
 
       const loggedInUser: UserProfile = {
         ...found,
-        sessions: updatedSessions
+        handle: found.handle || `@${found.username}`,
+        sessions: updatedSessions,
       };
 
       setCurrentUser(loggedInUser);
-      localStorage.setItem('bashartube_active_user', JSON.stringify(loggedInUser));
+      localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(loggedInUser));
       return { success: true };
     } catch (e: any) {
-      return { success: false, message: e.message || 'লগইন করতে সমস্যা হয়েছে।' };
+      return { success: false, message: e.message || 'লগইন করতে সমস্যা হয়েছে।' };
     }
   };
 
-  // Get Security Question for Password Recovery (Item 2)
+  // Get Security Question for Password Recovery
   const getSecurityQuestionByEmail = (email: string): { question?: string; error?: string } => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) return { error: 'জিমেইল ঠিকানা প্রদান করুন।' };
@@ -494,59 +699,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { question: 'আপনার প্রিয় সোশ্যাল প্ল্যাটফর্ম কোনটি?' };
     }
 
-    try {
-      const accountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = accountsRaw ? JSON.parse(accountsRaw) : [];
-      const found = accounts.find(a => a.email.toLowerCase() === cleanEmail);
-      if (!found) {
-        return { error: 'এই জিমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' };
-      }
-      return { question: found.securityQuestion || 'আপনার প্রিয় শহর কোনটি?' };
-    } catch {
-      return { error: 'তথ্য অনুসন্ধান করা সম্ভব হয়নি।' };
+    const merged = getMergedUsers();
+    const found = merged.find((a) => a.email.toLowerCase() === cleanEmail);
+    if (!found) {
+      return { error: 'এই জিমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' };
     }
+    return { question: found.securityQuestion || 'আপনার প্রিয় শহর কোনটি?' };
   };
 
-  // Reset Password with Security Question (Item 2 with Rate Limiting)
+  // Reset Password with Security Question
   const resetPasswordWithSecurityQuestion = (
-    email: string, 
-    answer: string, 
+    email: string,
+    answer: string,
     newPass: string
   ): { success: boolean; message?: string } => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanAnswer = answer.trim().toLowerCase();
     const cleanNewPass = newPass.trim();
 
-    // Check rate limit lock
     const attemptInfo = failedAttempts[cleanEmail];
     if (attemptInfo && attemptInfo.lockUntil && Date.now() < attemptInfo.lockUntil) {
       const waitSec = Math.ceil((attemptInfo.lockUntil - Date.now()) / 1000);
-      return { success: false, message: `নিরাপত্তা সুরক্ষার্থে অনুগ্রহ করে ${waitSec} সেকেন্ড পর পুনরায় চেষ্টা করুন।` };
+      return {
+        success: false,
+        message: `নিরাপত্তা সুরক্ষার্থে অনুগ্রহ করে ${waitSec} সেকেন্ড পর পুনরায় চেষ্টা করুন।`,
+      };
     }
 
     if (cleanNewPass.length < 6) {
       return { success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' };
     }
 
-    // Super Admin Recovery
     if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
       if (cleanAnswer === 'bashartube') {
         setAdminPassword(cleanNewPass);
         localStorage.setItem('bashartube_admin_master_password', cleanNewPass);
-        setFailedAttempts(prev => ({ ...prev, [cleanEmail]: { count: 0 } }));
+        setFailedAttempts((prev) => ({ ...prev, [cleanEmail]: { count: 0 } }));
         return { success: true, message: 'সুপার অ্যাডমিন পাসওয়ার্ড সফলভাবে রিসেট হয়েছে!' };
       } else {
         const nextCount = (attemptInfo?.count || 0) + 1;
         const lockUntil = nextCount >= 3 ? Date.now() + 60000 : undefined;
-        setFailedAttempts(prev => ({ ...prev, [cleanEmail]: { count: nextCount, lockUntil } }));
+        setFailedAttempts((prev) => ({ ...prev, [cleanEmail]: { count: nextCount, lockUntil } }));
         return { success: false, message: 'ভুল নিরাপত্তা উত্তর! সঠিক উত্তর প্রদান করুন।' };
       }
     }
 
     try {
-      const accountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = accountsRaw ? JSON.parse(accountsRaw) : [];
-      const idx = accounts.findIndex(a => a.email.toLowerCase() === cleanEmail);
+      const accounts = readLocalAccounts();
+      const idx = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
 
       if (idx === -1) {
         return { success: false, message: 'অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।' };
@@ -558,32 +758,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cleanAnswer !== correctAnswer) {
         const nextCount = (attemptInfo?.count || 0) + 1;
         const lockUntil = nextCount >= 3 ? Date.now() + 60000 : undefined;
-        setFailedAttempts(prev => ({ ...prev, [cleanEmail]: { count: nextCount, lockUntil } }));
+        setFailedAttempts((prev) => ({ ...prev, [cleanEmail]: { count: nextCount, lockUntil } }));
         return { success: false, message: 'ভুল নিরাপত্তা উত্তর! সঠিক উত্তর প্রদান করুন।' };
       }
 
-      // Correct answer: reset password & clear rate limiter
       accounts[idx].password = cleanNewPass;
-      localStorage.setItem('bashartube_registered_accounts', JSON.stringify(accounts));
-      setFailedAttempts(prev => ({ ...prev, [cleanEmail]: { count: 0 } }));
+      writeLocalAccounts(accounts);
+      setFailedAttempts((prev) => ({ ...prev, [cleanEmail]: { count: 0 } }));
 
-      // If resetting currently active user
       if (currentUser && currentUser.email.toLowerCase() === cleanEmail) {
         const updated = { ...currentUser, password: cleanNewPass };
         setCurrentUser(updated);
-        localStorage.setItem('bashartube_active_user', JSON.stringify(updated));
+        localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updated));
       }
 
-      return { success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।' };
+      return {
+        success: true,
+        message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।',
+      };
     } catch {
       return { success: false, message: 'পাসওয়ার্ড রিসেট ব্যর্থ হয়েছে।' };
     }
   };
 
-  // Change Security Question with Current Password Verification (Item 3)
+  // Change Password anytime from Security settings
+  const changePassword = async (
+    currentPass: string,
+    newPass: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser) return { success: false, message: 'অনুগ্রহ করে লগইন করুন।' };
+    const cleanCurrent = currentPass.trim();
+    const cleanNew = newPass.trim();
+
+    if (!cleanCurrent) return { success: false, message: 'বর্তমান পাসওয়ার্ড প্রদান করুন।' };
+    if (cleanNew.length < 6) {
+      return { success: false, message: 'নতুন পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।' };
+    }
+
+    if (currentUser.password && currentUser.password !== cleanCurrent && cleanCurrent !== adminPassword) {
+      return { success: false, message: 'বর্তমান পাসওয়ার্ডটি সঠিক নয়।' };
+    }
+
+    const updatedProfile: UserProfile = {
+      ...currentUser,
+      password: cleanNew,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setCurrentUser(updatedProfile);
+    localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updatedProfile));
+
+    const accounts = readLocalAccounts();
+    const idx = accounts.findIndex((a) => a.id === currentUser.id);
+    if (idx !== -1) {
+      accounts[idx] = updatedProfile;
+      writeLocalAccounts(accounts);
+    }
+
+    if (currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      setAdminPassword(cleanNew);
+      localStorage.setItem('bashartube_admin_master_password', cleanNew);
+    }
+
+    return { success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!' };
+  };
+
+  // Change Security Question with Current Password Verification
   const changeSecurityQuestion = async (
-    currentPass: string, 
-    newQuestion: string, 
+    currentPass: string,
+    newQuestion: string,
     newAnswer: string
   ): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'অনুগ্রহ করে লগইন করুন।' };
@@ -600,49 +843,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...currentUser,
       securityQuestion: newQuestion.trim(),
       securityAnswer: newAnswer.trim().toLowerCase(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     setCurrentUser(updatedProfile);
-    localStorage.setItem('bashartube_active_user', JSON.stringify(updatedProfile));
+    localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updatedProfile));
 
     try {
-      const accountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      if (accountsRaw) {
-        const accounts: UserProfile[] = JSON.parse(accountsRaw);
-        const idx = accounts.findIndex(a => a.id === currentUser.id);
-        if (idx !== -1) {
-          accounts[idx] = updatedProfile;
-          localStorage.setItem('bashartube_registered_accounts', JSON.stringify(accounts));
-        }
+      const accounts = readLocalAccounts();
+      const idx = accounts.findIndex((a) => a.id === currentUser.id);
+      if (idx !== -1) {
+        accounts[idx] = updatedProfile;
+        writeLocalAccounts(accounts);
       }
-      await updateDoc(doc(db, 'users', currentUser.id), {
-        securityQuestion: updatedProfile.securityQuestion,
-        securityAnswer: updatedProfile.securityAnswer
-      });
+      await setDoc(
+        doc(db, 'users', currentUser.id),
+        {
+          securityQuestion: updatedProfile.securityQuestion,
+          securityAnswer: updatedProfile.securityAnswer,
+          updatedAt: updatedProfile.updatedAt,
+        },
+        { merge: true }
+      );
     } catch (err) {
-      console.warn("Update question notice:", err);
+      console.warn('Update question notice:', err);
     }
 
     return { success: true, message: 'নিরাপত্তা প্রশ্ন ও উত্তর সফলভাবে আপডেট হয়েছে!' };
   };
 
-  // Logout specific device session (Item 5)
+  // Logout specific device session
   const logoutSession = (sessionId: string) => {
     if (!currentUser) return;
-    const remaining = (currentUser.sessions || []).filter(s => s.id !== sessionId);
+    const remaining = (currentUser.sessions || []).filter((s) => s.id !== sessionId);
     const updated = { ...currentUser, sessions: remaining };
     setCurrentUser(updated);
-    localStorage.setItem('bashartube_active_user', JSON.stringify(updated));
+    localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updated));
 
-    // If logged out current session, logout completely
-    const isCurrent = (currentUser.sessions || []).find(s => s.id === sessionId)?.isCurrent;
+    const isCurrent = (currentUser.sessions || []).find((s) => s.id === sessionId)?.isCurrent;
     if (isCurrent) {
       logout();
     }
   };
 
-  // Fetch active devices and sessions (with Firebase Token synchronization)
+  // Fetch active devices and sessions
   const fetchActiveSessions = async (): Promise<UserSession[]> => {
     if (!currentUser) return [];
 
@@ -654,136 +898,112 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
 
-    // Try fetching from Firestore
     try {
       const userDocRef = doc(db, 'users', currentUser.id);
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
         const data = userSnap.data() as UserProfile;
         if (data.sessions && data.sessions.length > 0) {
-          const sessionsWithToken = data.sessions.map(s => ({
+          return data.sessions.map((s) => ({
             ...s,
-            sessionToken: s.sessionToken || (s.isCurrent ? currentTokenId : `fb_tok_rem_${s.id.slice(-6)}`),
-            tokenStatus: s.tokenStatus || ('active' as const)
+            sessionToken:
+              s.sessionToken ||
+              (s.isCurrent ? currentTokenId : `fb_tok_rem_${s.id.slice(-6)}`),
+            tokenStatus: s.tokenStatus || ('active' as const),
           }));
-          return sessionsWithToken;
         }
       }
-    } catch (e) {
-      console.warn("Firestore sessions fetch fallback", e);
-    }
+    } catch {}
 
-    // Return current active session + secondary authorized device for realistic testing
     const currentDev = getClientSession();
     currentDev.sessionToken = currentTokenId;
     currentDev.tokenStatus = 'active';
 
-    const sessionsList: UserSession[] = currentUser.sessions && currentUser.sessions.length > 0
-      ? currentUser.sessions.map(s => ({
+    return currentUser.sessions && currentUser.sessions.length > 0
+      ? currentUser.sessions.map((s) => ({
           ...s,
-          sessionToken: s.sessionToken || (s.isCurrent ? currentTokenId : `fb_tok_rem_${s.id.slice(-6)}`),
-          tokenStatus: s.tokenStatus || ('active' as const)
+          sessionToken:
+            s.sessionToken ||
+            (s.isCurrent ? currentTokenId : `fb_tok_rem_${s.id.slice(-6)}`),
+          tokenStatus: s.tokenStatus || ('active' as const),
         }))
-      : [
-          currentDev,
-          {
-            id: 'session_secondary_mobile',
-            deviceName: 'iPhone 15 Pro (Safari Mobile)',
-            deviceType: 'mobile',
-            browser: 'Safari 17.4',
-            os: 'iOS',
-            ip: '103.205.71.44 (Chittagong, BD)',
-            ipAddress: '103.205.71.44',
-            lastActive: new Date(Date.now() - 3600000).toISOString(),
-            loginAt: new Date(Date.now() - 86400000).toISOString(),
-            isCurrent: false,
-            sessionToken: 'fb_tok_rem_9f2a1b',
-            tokenStatus: 'active'
-          }
-        ];
-
-    return sessionsList;
+      : [currentDev];
   };
 
-  // Invalidate specific session using Firebase auth tokens
-  const invalidateSessionWithToken = async (sessionId: string): Promise<{ success: boolean; message?: string }> => {
+  const invalidateSessionWithToken = async (
+    sessionId: string
+  ): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'ব্যবহারকারী লগইন অবস্থায় নেই।' };
 
     try {
-      // 1. If Firebase Auth user exists, force token refresh or token invalidation
       if (fbUser) {
         try {
           await fbUser.getIdToken(true);
         } catch {}
       }
 
-      // 2. Filter out session or mark revoked
-      const currentList = currentUser.sessions && currentUser.sessions.length > 0
-        ? currentUser.sessions
-        : await fetchActiveSessions();
+      const currentList =
+        currentUser.sessions && currentUser.sessions.length > 0
+          ? currentUser.sessions
+          : await fetchActiveSessions();
 
-      const targetSession = currentList.find(s => s.id === sessionId);
+      const targetSession = currentList.find((s) => s.id === sessionId);
       const isCurrent = targetSession?.isCurrent;
-
-      const remaining = currentList.filter(s => s.id !== sessionId);
+      const remaining = currentList.filter((s) => s.id !== sessionId);
 
       const updatedProfile = {
         ...currentUser,
-        sessions: remaining
+        sessions: remaining,
       };
 
       setCurrentUser(updatedProfile);
-      localStorage.setItem('bashartube_active_user', JSON.stringify(updatedProfile));
+      localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updatedProfile));
 
-      // 3. Update Firestore document
       try {
-        await updateDoc(doc(db, 'users', currentUser.id), {
-          sessions: remaining
-        });
-      } catch (e) {
-        console.warn("Firestore session revocation notice", e);
-      }
+        await setDoc(doc(db, 'users', currentUser.id), { sessions: remaining }, { merge: true });
+      } catch {}
 
-      // If the invalidated session was this current device, log out
       if (isCurrent) {
         await logout();
-        return { success: true, message: 'বর্তমান সেশনের Firebase টোকেন অকার্যকর করে সম্পূর্ণ লগআউট করা হয়েছে।' };
+        return {
+          success: true,
+          message: 'বর্তমান সেশন সফলভাবে লগআউট করা হয়েছে।',
+        };
       }
 
-      return { 
-        success: true, 
-        message: `Firebase Auth Token [${targetSession?.sessionToken?.substring(0, 10) || 'Active Token'}...] সফলভাবে বাতিল (revoked) করা হয়েছে এবং ডিভাইস সেশন লগআউট সম্পন্ন হয়েছে।` 
+      return {
+        success: true,
+        message: 'নির্বাচিত ডিভাইস সেশন সফলভাবে লগআউট করা হয়েছে।',
       };
     } catch (err: any) {
-      return { success: false, message: err.message || 'সেশন অকার্যকর করতে সমস্যা হয়েছে।' };
+      return { success: false, message: err.message || 'সেশন অকার্যকর করতে সমস্যা হয়েছে।' };
     }
   };
 
-
-  // Permanent Account Deletion with Password Confirmation (Item 6 & 7)
-  const deleteAccountWithPassword = async (password: string): Promise<{ success: boolean; message?: string }> => {
+  // Permanent Account Deletion with Password Confirmation
+  const deleteAccountWithPassword = async (
+    password: string
+  ): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'কোনো সক্রিয় ব্যবহারকারী পাওয়া যায়নি।' };
     const cleanPass = password.trim();
 
     if (currentUser.password && currentUser.password !== cleanPass && cleanPass !== adminPassword) {
-      return { success: false, message: 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড ছাড়া অ্যাকাউন্ট মুছে ফেলা সম্ভব নয়।' };
+      return {
+        success: false,
+        message: 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড ছাড়া অ্যাকাউন্ট মুছে ফেলা সম্ভব নয়।',
+      };
     }
 
     try {
-      // 1. Delete from registered accounts
-      const accountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      if (accountsRaw) {
-        const accounts: UserProfile[] = JSON.parse(accountsRaw);
-        const filtered = accounts.filter(a => a.id !== currentUser.id);
-        localStorage.setItem('bashartube_registered_accounts', JSON.stringify(filtered));
-      }
+      const filtered = readLocalAccounts().filter((a) => a.id !== currentUser.id);
+      writeLocalAccounts(filtered);
+      firestoreUsersRef.current = firestoreUsersRef.current.filter((u) => u.id !== currentUser.id);
+      refreshMergedDirectory();
 
-      // 2. Delete from Firestore
       try {
         await deleteDoc(doc(db, 'users', currentUser.id));
       } catch {}
 
-      // 3. Clear session
       await logout();
       return { success: true, message: 'আপনার অ্যাকাউন্ট স্থায়ীভাবে মুছে ফেলা হয়েছে।' };
     } catch (err: any) {
@@ -791,46 +1011,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Update Social Media Links (Item 9)
+  // Update Social Media Links
   const updateSocialLinks = async (links: SocialMediaLink[]) => {
     if (!currentUser) return;
-    const updated = { ...currentUser, socialLinks: links };
+    const nowIso = new Date().toISOString();
+    const updated = { ...currentUser, socialLinks: links, updatedAt: nowIso };
     setCurrentUser(updated);
-    localStorage.setItem('bashartube_active_user', JSON.stringify(updated));
+    localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updated));
+
+    const accounts = readLocalAccounts();
+    const idx = accounts.findIndex((a) => a.id === currentUser.id);
+    if (idx !== -1) {
+      accounts[idx] = { ...accounts[idx], socialLinks: links, updatedAt: nowIso };
+    } else {
+      accounts.push(updated);
+    }
+    writeLocalAccounts(accounts);
+    firestoreUsersRef.current = [
+      ...firestoreUsersRef.current.filter((u) => u.id !== currentUser.id),
+      updated,
+    ];
+    refreshMergedDirectory();
 
     try {
-      const accountsRaw = localStorage.getItem('bashartube_registered_accounts');
-      if (accountsRaw) {
-        const accounts: UserProfile[] = JSON.parse(accountsRaw);
-        const idx = accounts.findIndex(a => a.id === currentUser.id);
-        if (idx !== -1) {
-          accounts[idx].socialLinks = links;
-          localStorage.setItem('bashartube_registered_accounts', JSON.stringify(accounts));
-        }
-      }
-      await updateDoc(doc(db, 'users', currentUser.id), { socialLinks: links });
+      await setDoc(
+        doc(db, 'users', currentUser.id),
+        { socialLinks: links, updatedAt: nowIso },
+        { merge: true }
+      );
     } catch {}
   };
 
-  // Advanced Notification Settings Toggle (Item 12)
-  const updateNotificationCategory = (category: keyof NotificationCategorySettings, enabled: boolean) => {
+  const updateNotificationCategory = (
+    category: keyof NotificationCategorySettings,
+    enabled: boolean
+  ) => {
     const updatedCategories = {
       ...preferences.notificationCategories,
-      [category]: enabled
+      [category]: enabled,
     };
     const nextPrefs = {
       ...preferences,
-      notificationCategories: updatedCategories
+      notificationCategories: updatedCategories,
     };
     setPreferences(nextPrefs);
     localStorage.setItem('bashartube_prefs', JSON.stringify(nextPrefs));
   };
 
-  // Messenger Seen Status Toggle (Item 13)
   const toggleSeenStatus = (enabled: boolean) => {
     const nextPrefs = {
       ...preferences,
-      seenStatusEnabled: enabled
+      seenStatusEnabled: enabled,
     };
     setPreferences(nextPrefs);
     localStorage.setItem('bashartube_prefs', JSON.stringify(nextPrefs));
@@ -841,7 +1072,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.warn("Google sign-in notice:", error);
+      console.warn('Google sign-in notice:', error);
     } finally {
       setIsLoading(false);
     }
@@ -850,60 +1081,133 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       await fbSignOut(auth);
-    } catch (e) {
-      console.warn("Logout notice:", e);
-    }
+    } catch {}
     setCurrentUser(null);
-    localStorage.removeItem('bashartube_active_user');
+    localStorage.removeItem(ACTIVE_USER_STORAGE_KEY);
     setIsAdminUnlocked(false);
     sessionStorage.removeItem('bashartube_admin_unlocked');
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>): Promise<{ success: boolean; message?: string }> => {
+  // Update ANY profile field anytime cleanly; enforces unique @handle globally while allowing duplicate names!
+  const updateProfile = async (
+    updates: Partial<UserProfile>
+  ): Promise<{ success: boolean; message?: string }> => {
     if (!currentUser) return { success: false, message: 'ব্যবহারকারী লগইন অবস্থায় নেই।' };
 
-    // If handle is being updated, validate format & uniqueness
-    if (updates.handle !== undefined) {
-      const formattedHandle = normalizeHandle(updates.handle);
+    const sanitizedUpdates: Partial<UserProfile> = { ...updates };
+
+    if (sanitizedUpdates.displayName !== undefined) {
+      const cleanName = sanitizedUpdates.displayName.trim();
+      if (!cleanName) {
+        return { success: false, message: 'পূর্ণ নাম খালি রাখা যাবে না।' };
+      }
+      sanitizedUpdates.displayName = cleanName;
+    }
+
+    if (sanitizedUpdates.channelName !== undefined) {
+      const cleanChannel = sanitizedUpdates.channelName.trim();
+      if (!cleanChannel) {
+        return { success: false, message: 'চ্যানেলের নাম খালি রাখা যাবে না।' };
+      }
+      sanitizedUpdates.channelName = cleanChannel;
+    }
+
+    if (sanitizedUpdates.email !== undefined) {
+      const cleanEmail = sanitizedUpdates.email.trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return { success: false, message: 'একটি সঠিক জিমেইল / ইমেইল ঠিকানা লিখুন।' };
+      }
+      const mergedAccounts = getMergedUsers();
+      const emailTaken = mergedAccounts.some(
+        (u) => u.id !== currentUser.id && u.email.toLowerCase() === cleanEmail
+      );
+      if (emailTaken) {
+        return {
+          success: false,
+          message: 'এই ইমেইল ঠিকানাটি ইতিমধ্যে অন্য একটি অ্যাকাউন্টে ব্যবহৃত হচ্ছে।',
+        };
+      }
+      sanitizedUpdates.email = cleanEmail;
+    }
+
+    if (sanitizedUpdates.websiteUrl !== undefined) {
+      sanitizedUpdates.websiteUrl = formatWebsiteUrl(sanitizedUpdates.websiteUrl);
+    }
+
+    if (sanitizedUpdates.bio !== undefined) {
+      sanitizedUpdates.bio = sanitizedUpdates.bio.trim();
+    }
+
+    // If handle is being updated, enforce format + global uniqueness (local merged + authoritative Firestore check)
+    if (sanitizedUpdates.handle !== undefined || sanitizedUpdates.username !== undefined) {
+      const rawHandle = sanitizedUpdates.handle ?? sanitizedUpdates.username ?? '';
+      const formattedHandle = normalizeHandle(rawHandle);
       const formatCheck = validateHandleFormat(formattedHandle);
       if (!formatCheck.isValid) {
         return { success: false, message: formatCheck.error };
       }
 
-      const existingRaw = localStorage.getItem('bashartube_registered_accounts');
-      const accounts: UserProfile[] = existingRaw ? JSON.parse(existingRaw) : [];
-      if (checkHandleCollision(formattedHandle, accounts, currentUser.id)) {
-        return { 
-          success: false, 
-          message: `হ্যান্ডেল (${formattedHandle}) ইতিমধ্যে অন্য কেউ নিয়েছেন। সেম টু সেম হ্যান্ডেল বা কপি করা যাবে না।` 
+      const mergedAccounts = getMergedUsers();
+      if (checkHandleCollision(formattedHandle, mergedAccounts, currentUser.id)) {
+        return {
+          success: false,
+          message: `হ্যান্ডেল (${formattedHandle}) ইতিমধ্যে অন্য কেউ নিয়েছেন। একই হ্যান্ডেল কপি করা যাবে না।`,
         };
       }
 
-      updates.handle = formattedHandle;
-      updates.username = formattedHandle.slice(1);
-    }
-
-    const updated = { ...currentUser, ...updates, updatedAt: new Date().toISOString() };
-    setCurrentUser(updated);
-    localStorage.setItem('bashartube_active_user', JSON.stringify(updated));
-
-    try {
-      const existingRaw = localStorage.getItem('bashartube_registered_accounts');
-      if (existingRaw) {
-        const accounts: UserProfile[] = JSON.parse(existingRaw);
-        const idx = accounts.findIndex(a => a.id === currentUser.id);
-        if (idx !== -1) {
-          accounts[idx] = { ...accounts[idx], ...updates };
-          localStorage.setItem('bashartube_registered_accounts', JSON.stringify(accounts));
-        }
+      const isRemotelyAvailable = await verifyRemoteHandleUnique(formattedHandle, currentUser.id);
+      if (!isRemotelyAvailable) {
+        return {
+          success: false,
+          message: `হ্যান্ডেল (${formattedHandle}) ইতিমধ্যে অন্য কেউ নিয়েছেন। একই হ্যান্ডেল কপি করা যাবে না।`,
+        };
       }
-      const userRef = doc(db, 'users', currentUser.id);
-      await updateDoc(userRef, updates);
-    } catch (err) {
-      console.warn("Firestore update profile notice:", err);
+
+      sanitizedUpdates.handle = formattedHandle;
+      sanitizedUpdates.username = formattedHandle.slice(1);
     }
 
-    return { success: true, message: 'প্রোফাইল সফলভাবে আপডেট করা হয়েছে।' };
+    const nowIso = new Date().toISOString();
+    const updated: UserProfile = {
+      ...currentUser,
+      ...sanitizedUpdates,
+      handle:
+        sanitizedUpdates.handle ||
+        currentUser.handle ||
+        `@${sanitizedUpdates.username || currentUser.username}`,
+      updatedAt: nowIso,
+    };
+
+    setCurrentUser(updated);
+    localStorage.setItem(ACTIVE_USER_STORAGE_KEY, JSON.stringify(updated));
+
+    // Upsert into local accounts directory
+    const accounts = readLocalAccounts();
+    const idx = accounts.findIndex((a) => a.id === currentUser.id);
+    if (idx !== -1) {
+      accounts[idx] = { ...accounts[idx], ...updated };
+    } else {
+      accounts.push(updated);
+    }
+    writeLocalAccounts(accounts);
+
+    // Update live merged directory ref + state immediately
+    firestoreUsersRef.current = [
+      ...firestoreUsersRef.current.filter((u) => u.id !== currentUser.id),
+      updated,
+    ];
+    refreshMergedDirectory();
+
+    // Persist to Firestore cleanly with setDoc({ merge: true }) so it always works even if doc didn't exist yet
+    try {
+      await setDoc(doc(db, 'users', currentUser.id), sanitizeUserForFirestore(updated), {
+        merge: true,
+      });
+    } catch (err) {
+      console.warn('Firestore update profile notice:', err);
+    }
+
+    return { success: true, message: 'প্রোফাইলের সমস্ত পরিবর্তন সফলভাবে সংরক্ষিত হয়েছে!' };
   };
 
   const updatePreferences = (updates: Partial<UserPreferences>) => {
@@ -915,17 +1219,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toggleBlockUser = (targetUserId: string) => {
     const current = preferences.blockedUserIds || [];
     const exists = current.includes(targetUserId);
-    const updated = exists 
-      ? current.filter(id => id !== targetUserId)
-      : [...current, targetUserId];
+    const updated = exists ? current.filter((id) => id !== targetUserId) : [...current, targetUserId];
     updatePreferences({ blockedUserIds: updated });
   };
 
   const toggleDontRecommendCreator = (creatorId: string) => {
     const current = preferences.dontRecommendCreatorIds || [];
     const exists = current.includes(creatorId);
-    const updated = exists 
-      ? current.filter(id => id !== creatorId)
+    const updated = exists
+      ? current.filter((id) => id !== creatorId)
       : [...current, creatorId];
     updatePreferences({ dontRecommendCreatorIds: updated });
   };
@@ -933,12 +1235,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Admin Password Vault Methods
   const unlockAdminWithPassword = (pass: string): { success: boolean; message?: string } => {
     const trimmed = pass.trim();
-    if (trimmed === adminPassword || trimmed === SUPER_ADMIN_PASSWORD || trimmed === 'Fahmida3421') {
+    if (
+      trimmed === adminPassword ||
+      trimmed === SUPER_ADMIN_PASSWORD ||
+      trimmed === 'Fahmida3421'
+    ) {
       setIsAdminUnlocked(true);
       sessionStorage.setItem('bashartube_admin_unlocked', 'true');
       return { success: true };
     }
-    return { success: false, message: 'ভুল সিকিউরিটি পাসওয়ার্ড! সঠিক সুপার অ্যাডমিন পাসওয়ার্ড প্রদান করুন।' };
+    return {
+      success: false,
+      message: 'ভুল সিকিউরিটি পাসওয়ার্ড! সঠিক সুপার অ্যাডমিন পাসওয়ার্ড প্রদান করুন।',
+    };
   };
 
   const lockAdmin = () => {
@@ -946,7 +1255,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem('bashartube_admin_unlocked');
   };
 
-  const updateAdminPassword = (oldPass: string, newPass: string): { success: boolean; message?: string } => {
+  const updateAdminPassword = (
+    oldPass: string,
+    newPass: string
+  ): { success: boolean; message?: string } => {
     if (oldPass.trim() !== adminPassword && oldPass.trim() !== SUPER_ADMIN_PASSWORD) {
       return { success: false, message: 'বর্তমান পাসওয়ার্ডটি সঠিক নয়।' };
     }
@@ -956,43 +1268,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanNewPass = newPass.trim();
     setAdminPassword(cleanNewPass);
     localStorage.setItem('bashartube_admin_master_password', cleanNewPass);
-    return { success: true, message: 'অ্যাডমিন মাস্টার পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে।' };
+    return { success: true, message: 'অ্যাডমিন মাস্টার পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে।' };
   };
 
   return (
-    <AuthContext.Provider value={{
-      currentUser,
-      fbUser,
-      isLoading,
-      preferences,
-      isSuperAdmin,
-      isAdmin,
-      checkHandleAvailability,
-      registerAccount,
-      loginWithCredentials,
-      getSecurityQuestionByEmail,
-      resetPasswordWithSecurityQuestion,
-      changeSecurityQuestion,
-      deviceSessions,
-      logoutSession,
-      fetchActiveSessions,
-      invalidateSessionWithToken,
-      deleteAccountWithPassword,
-      updateSocialLinks,
-      updateNotificationCategory,
-      toggleSeenStatus,
-      loginWithGoogle,
-      logout,
-      updateProfile,
-      updatePreferences,
-      toggleBlockUser,
-      toggleDontRecommendCreator,
-      adminPassword,
-      isAdminUnlocked,
-      unlockAdminWithPassword,
-      lockAdmin,
-      updateAdminPassword
-    }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        fbUser,
+        isLoading,
+        preferences,
+        isSuperAdmin,
+        isAdmin,
+        registeredCreators,
+        checkHandleAvailability,
+        registerAccount,
+        loginWithCredentials,
+        getSecurityQuestionByEmail,
+        resetPasswordWithSecurityQuestion,
+        changeSecurityQuestion,
+        changePassword,
+        deviceSessions,
+        logoutSession,
+        fetchActiveSessions,
+        invalidateSessionWithToken,
+        deleteAccountWithPassword,
+        updateSocialLinks,
+        updateNotificationCategory,
+        toggleSeenStatus,
+        loginWithGoogle,
+        logout,
+        updateProfile,
+        updatePreferences,
+        toggleBlockUser,
+        toggleDontRecommendCreator,
+        adminPassword,
+        isAdminUnlocked,
+        unlockAdminWithPassword,
+        lockAdmin,
+        updateAdminPassword,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

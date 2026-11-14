@@ -76,6 +76,13 @@ export interface UserProfile {
 }
 
 export type VideoVisibility = 'public' | 'private';
+export type VideoFormat = 'short' | 'long';
+
+export interface VideoChapter {
+  time: string;
+  seconds: number;
+  title: string;
+}
 
 export interface VideoSubtitles {
   bn?: string;
@@ -95,7 +102,11 @@ export interface VideoItem {
   originalVideoUrl?: string;
   compressedVideoUrl?: string;
   thumbnailUrl: string;
-  duration: number; // in seconds, max 600
+  duration: number; // in seconds
+  videoFormat: VideoFormat;
+  videoWidth?: number;
+  videoHeight?: number;
+  aspectRatio?: number;
   category: string;
   visibility: VideoVisibility;
   viewsCount: number;
@@ -103,12 +114,12 @@ export interface VideoItem {
   sharesCount: number;
   commentsCount: number;
   commentsEnabled: boolean;
-  musicId?: string;
-  musicTitle?: string;
-  musicArtist?: string;
-  musicCover?: string;
   hasSubtitles: boolean;
   subtitles?: VideoSubtitles;
+  aiSummary?: string;
+  aiChapters?: VideoChapter[];
+  aiTags?: string[];
+  hasStoredBlob?: boolean;
   aiModerationStatus: 'approved' | 'flagged' | 'removed';
   isKidsSafe: boolean;
   validViewsCount?: number;

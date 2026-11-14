@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CallItem, CallType, CallStatus, UserProfile } from '../types';
 import { useAuth } from './AuthContext';
+import { generateDefaultAvatarDataUrl } from '../utils/profileSync';
 
 interface CallContextType {
   activeCall: CallItem | null;
@@ -34,11 +35,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     {
       id: 'call_1',
       callerId: 'user_creator_tanvir',
-      callerName: 'Tanvir Ahmed 🎬',
-      callerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
+      callerName: 'Tanvir Ahmed',
+      callerAvatar: generateDefaultAvatarDataUrl('Tanvir Ahmed', 'user_creator_tanvir'),
       receiverId: 'user_superadmin',
       receiverName: 'Abdul Bashar',
-      receiverAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
+      receiverAvatar: generateDefaultAvatarDataUrl('Abdul Bashar', 'user_superadmin'),
       type: 'video',
       status: 'ended',
       duration: 342, // 5 min 42s
@@ -48,11 +49,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     {
       id: 'call_2',
       callerId: 'user_nusrat',
-      callerName: 'Nusrat Jahan 🌸',
-      callerAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop',
+      callerName: 'Nusrat Jahan',
+      callerAvatar: generateDefaultAvatarDataUrl('Nusrat Jahan', 'user_nusrat'),
       receiverId: 'user_superadmin',
       receiverName: 'Abdul Bashar',
-      receiverAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
+      receiverAvatar: generateDefaultAvatarDataUrl('Abdul Bashar', 'user_superadmin'),
       type: 'voice',
       status: 'missed',
       duration: 0,

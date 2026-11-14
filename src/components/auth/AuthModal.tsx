@@ -22,6 +22,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { normalizeHandle, validateHandleFormat } from '../../utils/handleValidation';
+import { generateDefaultAvatarDataUrl } from '../../utils/profileSync';
+import { compressAvatarImageFile } from '../../utils/imageCompression';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -30,12 +32,12 @@ interface AuthModalProps {
 }
 
 const PRESET_LOGOS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&h=200&fit=crop&crop=faces',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=faces',
+  generateDefaultAvatarDataUrl('BasharTube', 'b1'),
+  generateDefaultAvatarDataUrl('Creator BD', 'c2'),
+  generateDefaultAvatarDataUrl('Dhaka Studio', 'd3'),
+  generateDefaultAvatarDataUrl('Padma Media', 'p4'),
+  generateDefaultAvatarDataUrl('Sylhet Vlog', 's5'),
+  generateDefaultAvatarDataUrl('Bengal Live', 'g6'),
 ];
 
 export const AuthModal: React.FC<AuthModalProps> = ({ 
@@ -120,26 +122,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     'custom'
   ];
 
-  // Process direct logo file from device (No link/URL needed)
-  const handleProcessLogoFile = (file: File) => {
+  // Process direct logo file from device (No link/URL needed) with clean compression
+  const handleProcessLogoFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrorMessage('অনুগ্রহ করে শুধুমাত্র ইমেজ ফাইল (PNG, JPG, WEBP) আপলোড করুন।');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMessage('লোগো ফাইলের সাইজ সর্বোচ্চ ৫ মেগাবাইট (5MB) হতে পারে।');
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage('লোগো ফাইলের সাইজ সর্বোচ্চ ১০ মেগাবাইট (10MB) হতে পারে।');
       return;
     }
 
     setErrorMessage(null);
     setLogoFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setChannelLogo(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressAvatarImageFile(file, 320, 0.82);
+      setChannelLogo(compressed);
+    } catch {
+      setErrorMessage('ছবি প্রসেস করতে সমস্যা হয়েছে। অনুগ্রহ করে অন্য একটি ছবি চেষ্টা করুন।');
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,8 +351,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="relative w-full max-w-md bg-zinc-900/95 border border-zinc-800 rounded-3xl p-5 sm:p-7 shadow-2xl backdrop-blur-xl my-6">
         {/* Close Button */}
         <button
+          type="button"
+          aria-label="Close modal"
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+          className="absolute top-4 right-4 p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
         >
           <X className="w-5 h-5" />
         </button>
@@ -541,6 +544,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 placeholder="যেমন: তানভীর ভ্লগস BD"
                 className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-pink-500 transition font-sans"
               />
+              <p className="text-[10px] text-zinc-500 mt-1">
+                নাম ও চ্যানেলের নাম যে কেউ একই রকম রাখতে পারবেন, তবে @হ্যান্ডেল সবার জন্য আলাদা হতে হবে।
+              </p>
             </div>
 
             {/* 3. ইউনিক হ্যান্ডেল (@handle) - সেম টু সেম বা কপি করা যাবে না */}

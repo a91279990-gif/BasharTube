@@ -92,5 +92,15 @@ service cloud.firestore {
     match /platform_settings/{settingId} {
       allow read, write: if true;
     }
+
+    // Monetization Applications
+    match /monetization_applications/{appId} {
+      allow read, write: if true;
+    }
+
+    // Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow read, write: if true;
+    }
   }
 }

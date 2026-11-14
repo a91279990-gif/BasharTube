@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CommentItem, CommentReply, ReactionType, CommentReaction } from '../types';
 import { INITIAL_COMMENTS } from '../data/mockData';
 import { useAuth } from './AuthContext';
+import { generateDefaultAvatarDataUrl, propagateProfileToComments, propagateProfileToReplies } from '../utils/profileSync';
 
 interface CommentContextType {
   comments: CommentItem[];
@@ -41,9 +42,9 @@ export const CommentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         commentId: 'com_1',
         videoId: 'vid_1',
         authorId: 'user_creator_tanvir',
-        authorName: 'Tanvir Ahmed 🎬',
+        authorName: 'Tanvir Ahmed',
         authorUsername: 'tanvir_vlogs',
-        authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces',
+        authorAvatar: generateDefaultAvatarDataUrl('Tanvir Ahmed', 'user_creator_tanvir'),
         text: 'ধন্যবাদ বাশার ভাই! ইনশাআল্লাহ আগামী সপ্তাহে সাজেক ও বান্দরবানের ভিডিও আসছে।',
         isEdited: false,
         createdAt: '2026-03-01T15:30:00Z'
@@ -57,12 +58,25 @@ export const CommentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         commentId: 'com_1',
         userId: 'user_creator_tanvir',
         username: 'tanvir_vlogs',
-        userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces',
+        userAvatar: generateDefaultAvatarDataUrl('Tanvir Ahmed', 'user_creator_tanvir'),
         reactionType: 'love',
         createdAt: '2026-03-01T15:05:00Z'
       }
     ]
   });
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setComments((prev) => propagateProfileToComments(prev, currentUser));
+    setReplies((prev) => propagateProfileToReplies(prev, currentUser));
+  }, [
+    currentUser?.id,
+    currentUser?.displayName,
+    currentUser?.channelName,
+    currentUser?.username,
+    currentUser?.avatarUrl,
+    currentUser?.isVerified,
+  ]);
 
   const getCommentsForVideo = (videoId: string): CommentItem[] => {
     return comments

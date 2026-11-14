@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { NotificationItem, NotificationType } from '../types';
+import { generateDefaultAvatarDataUrl } from '../utils/profileSync';
 
 interface NotificationContextType {
   notifications: NotificationItem[];
@@ -22,8 +23,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       id: 'notif_1',
       userId: 'user_superadmin',
       actorId: 'user_creator_tanvir',
-      actorName: 'Tanvir Ahmed 🎬',
-      actorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
+      actorName: 'Tanvir Ahmed',
+      actorAvatar: generateDefaultAvatarDataUrl('Tanvir Ahmed', 'user_creator_tanvir'),
       type: 'creator_heart',
       title: 'ক্রিয়েটর হার্ট দিয়েছেন',
       message: 'তানভীর আহমেদ আপনার মন্তব্যে হার্ট দিয়েছেন: "অসাধারণ সিনেমাটোগ্রাফি তানভীর ভাই..."',
@@ -34,8 +35,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       id: 'notif_2',
       userId: 'user_superadmin',
       actorId: 'user_nusrat',
-      actorName: 'Nusrat Jahan 🌸',
-      actorAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop',
+      actorName: 'Nusrat Jahan',
+      actorAvatar: generateDefaultAvatarDataUrl('Nusrat Jahan', 'user_nusrat'),
       type: 'reaction',
       title: 'নতুন কমেন্ট রিঅ্যাকশন',
       message: 'নুসরাত জাহান আপনার মন্তব্যে "Love" রিঅ্যাক্ট করেছেন।',
@@ -46,8 +47,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       id: 'notif_3',
       userId: 'user_superadmin',
       actorId: 'user_creator_tanvir',
-      actorName: 'Tanvir Ahmed 🎬',
-      actorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
+      actorName: 'Tanvir Ahmed',
+      actorAvatar: generateDefaultAvatarDataUrl('Tanvir Ahmed', 'user_creator_tanvir'),
       type: 'follow',
       title: 'নতুন অনুসারী',
       message: 'তানভীর আহমেদ আপনাকে ফলো করা শুরু করেছেন।',
